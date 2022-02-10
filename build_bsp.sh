@@ -33,96 +33,78 @@ declare -A __build_target__=(
 	["SCRIPT_CLEAN"]=" "	# clean script for clean command.
 )
 
-__build_prog_path="$(dirname "$(realpath "$0")")"
-__build_script_dir="${__build_prog_path}/configs"
-__build_script_prefix="build."
-__build_script_extention="sh"
-__build_script_status_file="${__build_prog_path}/.build_script_config"
-__build_log_dir="log"	# save to result directory
+__build_sh_dir="$(dirname "$(realpath "$0")")"
+__build_config_dir="${__build_sh_dir}/configs"
+__build_config_prefix="build."
+__build_config_extend="sh"
+__build_config_status="${__build_sh_dir}/.build_status"
+__build_log_dir=".log"	# save to result directory
 
-function print_format () {
-	echo -e " config.sh: format"
-	echo -e "\t BUILD_IMAGES=("
-	echo -e "\t\t\" CROSS_TOOL	= <cross compiler(CROSS_COMPILE) path for the make build> \","
-	echo -e "\t\t\" RESULT_DIR	= <result directory to copy build images> \","
-	echo -e "\t\t\" <TARGET>	="
-	echo -e "\t\t\t BUILD_DEPEND    : < target dependency, to support multiple targets, the separator is' '. >, "
-	echo -e "\t\t\t BUILD_MANUAL    : < manual build, It true, does not support automatic build and must be built manually. > ,"
-	echo -e "\t\t\t CROSS_TOOL      : < make build crosstool compiler path (set CROSS_COMPILE=) > ,"
-	echo -e "\t\t\t MAKE_ARCH       : < make build architecture (set ARCH=) ex> arm, arm64 > ,"
-	echo -e "\t\t\t MAKE_PATH       : < make build source path > ,"
-	echo -e "\t\t\t MAKE_CONFIG     : < make build default config(defconfig) > ,"
-	echo -e "\t\t\t MAKE_TARGET     : < make build targets, to support multiple targets, the separator is';' > ,"
-	echo -e "\t\t\t MAKE_NOT_CLEAN  : < if true do not support make clean commands > ,"
-	echo -e "\t\t\t MAKE_OPTION     : < make build option > ,"
-	echo -e "\t\t\t RESULT_FILE     : < make built images to copy resultdir, to support multiple file, the separator is';' > ,"
-	echo -e "\t\t\t RESULT_NAME     : < copy names to RESULT_DIR, to support multiple name, the separator is';' > ,"
-	echo -e "\t\t\t MAKE_JOBS       : < make build jobs number (-j n) > ,"
-	echo -e "\t\t\t SCRIPT_PREV     : < previous build script before make build. > ,"
-	echo -e "\t\t\t SCRIPT_POST     : < post build script after make build before copy 'RESULT_FILE' done. > ,"
-	echo -e "\t\t\t SCRIPT_LATE     : < late build script after copy 'RESULT_FILE' done. > ,"
-	echo -e "\t\t\t SCRIPT_CLEAN    : < clean script for clean command. > \","
+function show_format () {
+	echo -e " Format ...\n"
+	echo -e " BUILD_IMAGES=("
+	echo -e "\t\" CROSS_TOOL	= <cross compiler(CROSS_COMPILE) path for the make build> \","
+	echo -e "\t\" RESULT_DIR	= <result directory to copy build images> \","
+	echo -e "\t\" <TARGET>	="
+	echo -e "\t\t BUILD_DEPEND    : < target dependency, to support multiple targets, the separator is' '. >, "
+	echo -e "\t\t BUILD_MANUAL    : < manual build, It true, does not support automatic build and must be built manually. > ,"
+	echo -e "\t\t CROSS_TOOL      : < make build crosstool compiler path (set CROSS_COMPILE=) > ,"
+	echo -e "\t\t MAKE_ARCH       : < make build architecture (set ARCH=) ex> arm, arm64 > ,"
+	echo -e "\t\t MAKE_PATH       : < make build source path > ,"
+	echo -e "\t\t MAKE_CONFIG     : < make build default config(defconfig) > ,"
+	echo -e "\t\t MAKE_TARGET     : < make build targets, to support multiple targets, the separator is';' > ,"
+	echo -e "\t\t MAKE_NOT_CLEAN  : < if true do not support make clean commands > ,"
+	echo -e "\t\t MAKE_OPTION     : < make build option > ,"
+	echo -e "\t\t RESULT_FILE     : < make built images to copy resultdir, to support multiple file, the separator is';' > ,"
+	echo -e "\t\t RESULT_NAME     : < copy names to RESULT_DIR, to support multiple name, the separator is';' > ,"
+	echo -e "\t\t MAKE_JOBS       : < make build jobs number (-j n) > ,"
+	echo -e "\t\t SCRIPT_PREV     : < previous build script before make build. > ,"
+	echo -e "\t\t SCRIPT_POST     : < post build script after make build before copy 'RESULT_FILE' done. > ,"
+	echo -e "\t\t SCRIPT_LATE     : < late build script after copy 'RESULT_FILE' done. > ,"
+	echo -e "\t\t SCRIPT_CLEAN    : < clean script for clean command. > \","
+	echo -e ""
 }
 
 function usage () {
-	echo ""
+	if [[ "${1}" == "format" ]]; then show_format; exit 0; fi
+
 	echo " Usage:"
-	echo -e "\t$(basename "$0") -f script.sh [options]"
-	echo -e "\t$(basename "$0") menuconfig [-D]\n"
-	print_format
+	echo -e "\t$(basename "$0") -f <config> [options]"
 	echo ""
 	echo " options:"
-	echo -e  "\t-t\t select build targets, '<TARGET>' ..."
-	echo -e  "\t-c\t run command"
-	echo -e  "\t\t support 'cleanbuild','rebuild' and commands supported by target"
-	echo -e  "\t-C\t clean all targets, this option run make clean/distclean and 'SCRIPT_CLEAN'"
-	echo -e  "\t-i\t show target configs info"
-	echo -e  "\t-l\t listup targets"
-	echo -e  "\t-j\t set build jobs"
-	echo -e  "\t-o\t set build options"
-	echo -e  "\t-e\t edit build config file"
-	echo -e  "\t-v\t show build log"
-	echo -e  "\t-V\t show build log and enable external shell tasks tracing (with 'set -x')"
-	echo -e  "\t-p\t skip dependency"
-	echo -ne "\t-s\t build stage :"
+	echo -ne "\t menuconfig\t Select the config with"
+	echo -ne " the prefix '${__build_config_prefix}' and extend '.${__build_config_extend}'"
+	echo -e  " in the configs directory."
+	echo -e  "\t\t\t menuconfig is depended '-D' path"
+	echo -e  "\t-D [dir]\t set configs directory for the menuconfig\n"
+	echo -e  "\t-t [target]\t set build targets, '<TARGET>' ..."
+	echo -e  "\t-c [command]\t run command"
+	echo -e  "\t\t\t support 'cleanbuild','rebuild' and commands supported by target"
+	echo -e  "\t-C\t\t clean all targets, this option run make clean/distclean and 'SCRIPT_CLEAN'"
+	echo -e  "\t-i\t\t show target config info"
+	echo -e  "\t-l\t\t listup targets"
+	echo -e  "\t-j [jops]\t set build jobs"
+	echo -e  "\t-o [option]\t set build options"
+	echo -e  "\t-e\t\t edit build config file"
+	echo -e  "\t-v\t\t show build log"
+	echo -e  "\t-V\t\t show build log and enable external shell tasks tracing (with 'set -x')"
+	echo -e  "\t-p\t\t skip dependency"
+	echo -ne "\t-s [stage]\t build stage :"
 	for i in "${!__build_stage[@]}"; do
-		echo -n " '$i'";
+		echo -n " '${i}'";
 	done
-	echo -e  "\n\t\t stage order : prev > make > post > copy > late"
-	echo -e  "\t-m\t build manual targets 'BUILD_MANUAL'"
-	echo -e  "\t-A\t Full build including manual build"
-	echo ""
-	echo " menuconfig:"
-	echo -e  "\t Select the script with the prefix '${__build_script_prefix}' and extention '.${__build_script_extention}' in the configs directory."
-	echo -e  "\t-D\t set scripts directory for the menuconfig"
-	echo ""
-	echo "case 1. build with '-f'"
-	echo -e  "\tBuild all targets"
-	echo -e  "\t\t$> $0 -f configs/build.xxx.sh"
-	echo -e  "\tBuild select target"
-	echo -e  "\t\t$> $0 -f configs/build.xxx.sh -t <target ...>"
-	echo -e  "\tBuild select target with command"
-	echo -e  "\t\t$> $0 -f configs/build.xxx.sh -t <target ...> -c <command>"
-	echo ""
-	echo "case 2. build with menuconfig"
-	echo -e  "\tSet scripts directory"
-	echo -e  "\t\t$> $0 -D <dir>"
-	echo -e  "\tSelect script"
-	echo -e  "\t\t$> $0 menuconfig"
-	echo -e  "\tBuild all targets"
-	echo -e  "\t\t$> $0"
-	echo -e  "\tBuild select target"
-	echo -e  "\t\t$> $0 -t <target ...>"
-	echo -e  "\tBuild select target with command"
-	echo -e  "\t\t$> $0 -t <target ...> -c <command>"
+	echo -e  "\n\t\t\t stage order : prev > make > post > copy > late"
+	echo -e  "\t-m\t\t build manual targets 'BUILD_MANUAL'"
+	echo -e  "\t-A\t\t Full build including manual build"
+	echo -e  "\t-h [option]\t 'format'"
 	echo ""
 }
 
 function err () { echo -e "\033[0;31m$*\033[0m"; }
 function msg () { echo -e "\033[0;33m$*\033[0m"; }
 
-__build_script_target=""	# build script file
-__build_image=()		# store ${BUILD_IMAGES}
+__build_target_config=""	# build script file
+__build_image=()	# store ${BUILD_IMAGES}
 __build_target=()
 
 __build_command=""
@@ -139,6 +121,8 @@ __dbg_trace=false
 __build_manual_targets=false
 __build_all_targets=false	# include manual targets
 __build_check_depend=true
+__build_target_stage=""
+__build_progress_pid=""
 
 declare -A __build_stage=(
 	["prev"]=true		# execute script 'SCRIPT_PREV'
@@ -155,7 +139,6 @@ function show_build_time () {
 	printf "\n Total: %d:%02d:%02d\n" $hrs $min $sec
 }
 
-__build_progress_pid=""
 function show_progress () {
 	local spin='-\|/' pos=0
 	local delay=0.3 start=$SECONDS
@@ -189,8 +172,8 @@ function kill_progress () {
 trap kill_progress EXIT
 
 function print_env () {
-	echo -e "\n\033[1;32m BUILD STATUS       = ${__build_script_status_file}\033[0m";
-	echo -e "\033[1;32m BUILD CONFIG       = ${__build_script_target}\033[0m";
+	echo -e "\n\033[1;32m BUILD STATUS       = ${__build_config_status}\033[0m";
+	echo -e "\033[1;32m BUILD CONFIG       = ${__build_target_config}\033[0m";
 	echo ""
 	for key in "${!__build_env__[@]}"; do
 		[[ -z ${__build_env__[${key}]} ]] && continue;
@@ -203,9 +186,9 @@ function parse_env () {
 	for key in "${!__build_env__[@]}"; do
 		local val=""
 		for i in "${__build_image[@]}"; do
-			if [[ $i = *"${key}"* ]]; then
+			if [[ ${i} = *"${key}"* ]]; then
 				local elem
-				elem="$(echo "$i" | cut -d'=' -f 2-)"
+				elem="$(echo "${i}" | cut -d'=' -f 2-)"
 				elem="$(echo "$elem" | cut -d',' -f 1)"
 				elem="$(echo -e "${elem}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 				val=$elem
@@ -222,19 +205,19 @@ function parse_env () {
 }
 
 function setup_env () {
-	local path=$1
+	local path=${1}
 	[[ -z ${path} ]] && return;
 
 	path=$(realpath "$(dirname "${1}")")
 	if [[ -z ${path} ]]; then
-		err " No such 'CROSS_TOOL': $(dirname "$1")"
+		err " No such 'CROSS_TOOL': $(dirname "${1}")"
 		exit 1
 	fi
 	export PATH=${path}:$PATH
 }
 
 function print_target () {
-	local target=$1
+	local target=${1}
 
 	echo -e "\n\033[1;32m BUILD TARGET       = ${target}\033[0m";
 	for key in "${!__build_target__[@]}"; do
@@ -248,19 +231,19 @@ function print_target () {
 	done
 }
 
-declare -A __build_target_depend=()
-__build_target_depend_list=()
+declare -A __build_depend=()
+__build_depend_list=()
 
 function parse_depend () {
-	local target=$1
+	local target=${1}
 	local contents found=false
 	local key="BUILD_DEPEND"
 
 	# get target's contents
 	for i in "${__build_image[@]}"; do
-		if [[ $i == *"${target}"* ]]; then
+		if [[ ${i} == *"${target}"* ]]; then
 			local elem
-			elem="$(echo $(echo "$i" | cut -d'=' -f 1) | cut -d' ' -f 1)"
+			elem="$(echo $(echo "${i}" | cut -d'=' -f 1) | cut -d' ' -f 1)"
 			[[ ${target} != "$elem" ]] && continue;
 
 			# cut
@@ -273,14 +256,14 @@ function parse_depend () {
 		fi
 	done
 
-	if [[ $found == false ]]; then
+	if [[ ${found} == false ]]; then
 		err "\n Unknown target '${target}'"
 		exit 1;
 	fi
 
 	# parse contents's elements
 	local val=""
-	__build_target_depend[${key}]=${val}
+	__build_depend[${key}]=${val}
 	if ! echo "$contents" | grep -qwn "${key}"; then return; fi
 
 	val="${contents#*${key}}"
@@ -290,18 +273,18 @@ function parse_depend () {
 	val="$(echo "${val}" | sed 's/^[ \t]*//;s/[ \t]*$//')"
 	val="$(echo "${val}" | sed 's/\s\s*/ /g')"
 
-	__build_target_depend[${key}]="${val}"
+	__build_depend[${key}]="${val}"
 }
 
 function parse_target () {
-	local target=$1
+	local target=${1}
 	local contents found=false
 
 	# get target's contents
 	for i in "${__build_image[@]}"; do
-		if [[ $i == *"${target}"* ]]; then
+		if [[ ${i} == *"${target}"* ]]; then
 			local elem
-			elem="$(echo $(echo "$i" | cut -d'=' -f 1) | cut -d' ' -f 1)"
+			elem="$(echo $(echo "${i}" | cut -d'=' -f 1) | cut -d' ' -f 1)"
 			[[ ${target} != "$elem" ]] && continue;
 
 			# cut
@@ -314,7 +297,7 @@ function parse_target () {
 		fi
 	done
 
-	if [[ $found == false ]]; then
+	if [[ ${found} == false ]]; then
 		err "\n Unknown target '${target}'"
 		exit 1;
 	fi
@@ -348,25 +331,25 @@ function parse_target () {
 }
 
 function check_depend () {
-        local target=$1
+        local target=${1}
 
 	parse_depend "${target}"
 
-	if [[ -z ${__build_target_depend["BUILD_DEPEND"]} ]]; then
-		unset __build_target_depend_list[${#__build_target_depend_list[@]}-1]
+	if [[ -z ${__build_depend["BUILD_DEPEND"]} ]]; then
+		unset __build_depend_list[${#__build_depend_list[@]}-1]
 		return
 	fi
 
-        for d in ${__build_target_depend["BUILD_DEPEND"]}; do
-		if [[ " ${__build_target_depend_list[@]} " =~ "${d}" ]]; then
+        for d in ${__build_depend["BUILD_DEPEND"]}; do
+		if [[ " ${__build_depend_list[@]} " =~ "${d}" ]]; then
 			echo -e "\033[1;31m Error recursive, Check 'BUILD_DEPEND':\033[0m"
-			echo -e "\033[1;31m\t${__build_target_depend_list[@]} $d\033[0m"
+			echo -e "\033[1;31m\t${__build_depend_list[@]} $d\033[0m"
 			exit 1;
 		fi
-		__build_target_depend_list+=("$d")
+		__build_depend_list+=("$d")
 		check_depend "$d"
         done
-	unset __build_target_depend_list[${#__build_target_depend_list[@]}-1]
+	unset __build_depend_list[${#__build_depend_list[@]}-1]
 }
 
 function parse_target_list () {
@@ -382,29 +365,29 @@ function parse_target_list () {
 
 		# skip buil environments"
 		for n in "${!__build_env__[@]}"; do
-			if [[ $n == "${val}" ]]; then
+			if [[ ${n} == "${val}" ]]; then
 				add=false
 				break
 			fi
 		done
 
-		[[ $add != true ]] && continue;
+		[[ ${add} != true ]] && continue;
 		[[ ${str} == *"="* ]] && target_list+=("${val}");
 	done
 
 	for i in "${__build_target[@]}"; do
 		local found=false;
 		for n in "${target_list[@]}"; do
-			if [[ $i == "$n" ]]; then
+			if [[ ${i} == "${n}" ]]; then
 				found=true
 				break;
 			fi
 		done
-		if [[ $found == false ]]; then
-			echo -e  "\n Unknown target '$i'"
+		if [[ ${found} == false ]]; then
+			echo -e  "\n Unknown target '${i}'"
 			echo -ne " Check targets :"
 			for t in "${target_list[@]}"; do
-				echo -n " $t"
+				echo -n " ${t}"
 			done
 			echo -e "\n"
 			exit 1;
@@ -412,15 +395,15 @@ function parse_target_list () {
 	done
 
 	for t in "${target_list[@]}"; do
-		parse_target "$t"
+		parse_target "${t}"
 		depend=${__build_target__["BUILD_DEPEND"]}
-		[[ -n $depend ]] && depend="depend: $depend";
+		[[ -n ${depend} ]] && depend="depend: ${depend}";
 		if [[ ${__build_target__["BUILD_MANUAL"]} == true ]]; then
-			list_manuals+=("$t")
-			dump_manuals+=("$(printf "%-18s %s\n" "$t" "${depend} ")")
+			list_manuals+=("${t}")
+			dump_manuals+=("$(printf "%-18s %s\n" "${t}" "${depend} ")")
 		else
-			list_targets+=("$t")
-			dump_targets+=("$(printf "%-18s %s\n" "$t" "${depend} ")")
+			list_targets+=("${t}")
+			dump_targets+=("$(printf "%-18s %s\n" "${t}" "${depend} ")")
 		fi
 	done
 
@@ -433,21 +416,21 @@ function parse_target_list () {
 	# check dependency
 	if [[ ${__build_check_depend} == true ]]; then
 		for i in "${__build_target[@]}"; do
-			__build_target_depend_list+=("$i")
-			check_depend "$i"
+			__build_depend_list+=("${i}")
+			check_depend "${i}"
 		done
 	fi
 
-	if [[ $__show_list == true ]]; then
-		echo -e "\033[1;32m BUILD CONFIG  = ${__build_script_target}\033[0m";
+	if [[ ${__show_list} == true ]]; then
+		echo -e "\033[1;32m BUILD CONFIG  = ${__build_target_config}\033[0m";
 		echo -e "\033[0;33m TARGETS\033[0m";
 		for i in "${dump_targets[@]}"; do
-			echo -e "\033[0;33m  $i\033[0m";
+			echo -e "\033[0;33m  ${i}\033[0m";
 		done
-		if [[ $list_manuals ]]; then
+		if [[ ${list_manuals} ]]; then
 			echo -e "\033[0;33m\n MANUALLY\033[0m";
 			for i in "${dump_manuals[@]}"; do
-				echo -e "\033[0;33m  $i\033[0m";
+				echo -e "\033[0;33m  ${i}\033[0m";
 			done
 		fi
 		echo ""
@@ -456,42 +439,43 @@ function parse_target_list () {
 }
 
 function exec_shell () {
-	local command=$1 target=$2
+	local command=${1} target=${2}
 	local log="${__build_log_dir}/${target}.script.log"
 	local ret
 
-	[[ $__dbg_trace == true ]] && set -x;
+	[[ ${__dbg_trace} == true ]] && set -x;
 
 	IFS=";"
 	for cmd in ${command}; do
-		cmd="$(echo "$cmd" | sed 's/\s\s*/ /g')"
-		cmd="$(echo "$cmd" | sed 's/^[ \t]*//;s/[ \t]*$//')"
-		cmd="$(echo "$cmd" | sed 's/\s\s*/ /g')"
-		fnc=$($(echo $cmd| cut -d' ' -f1) 2>/dev/null | grep -q 'function')
+		cmd="$(echo "${cmd}" | sed 's/\s\s*/ /g')"
+		cmd="$(echo "${cmd}" | sed 's/^[ \t]*//;s/[ \t]*$//')"
+		cmd="$(echo "${cmd}" | sed 's/\s\s*/ /g')"
+		fnc=$($(echo ${cmd}| cut -d' ' -f1) 2>/dev/null | grep -q 'function')
 		unset IFS
 
-		msg "\n $> $cmd"
+		msg "\n LOG : ${log}"
+		msg "\n $> ${cmd}"
 		rm -f "$log"
 		[[ ${__dbg_verbose} == false ]] && run_progress;
 
 		if $fnc; then
 			if [[ ${__dbg_verbose} == false ]]; then
-				$cmd >> "$log" 2>&1
+				${cmd} >> "$log" 2>&1
 			else
-				$cmd
+				${cmd}
 			fi
 		else
 			if [[ ${__dbg_verbose} == false ]]; then
-				bash -c "$cmd" >> "$log" 2>&1
+				bash -c "${cmd}" >> "$log" 2>&1
 			else
-				bash -c "$cmd"
+				bash -c "${cmd}"
 			fi
 		fi
 		### get return value ###
 		ret=$?
 
 		kill_progress
-		[[ $__dbg_trace == true ]] && set +x;
+		[[ ${__dbg_trace} == true ]] && set +x;
 		if [[ ${ret} -ne 0 ]]; then
 			if [[ ${__dbg_verbose} == false ]]; then
 				err " ERROR: script '${target}':$log\n";
@@ -506,11 +490,12 @@ function exec_shell () {
 }
 
 function exec_make () {
-	local command=$1 target=$2
+	local command=${1} target=${2}
 	local log="${__build_log_dir}/${target}.make.log"
 	local ret
 
 	command="$(echo "${command}" | sed 's/\s\s*/ /g')"
+	msg "\n LOG : ${log}"
 	msg "\n $> make ${command}"
 	rm -f "$log"
 
@@ -538,7 +523,7 @@ function exec_make () {
 }
 
 function run_script_prev () {
-	local target=$1
+	local target=${1}
 
 	if [[ -z ${__build_target__["SCRIPT_PREV"]} ]] ||
 	   [[ ${__build_cleanall} == true ]] ||
@@ -551,8 +536,47 @@ function run_script_prev () {
 	fi
 }
 
+function run_script_post () {
+	local target=${1}
+
+	if [[ -z ${__build_target__["SCRIPT_POST"]} ]] ||
+	   [[ ${__build_cleanall} == true ]] ||
+	   [[ ${__build_stage["post"]} == false ]]; then
+		return;
+	fi
+
+	if ! exec_shell "${__build_target__["SCRIPT_POST"]}" "${target}"; then
+		exit 1;
+	fi
+}
+
+function run_script_late () {
+	local target=${1}
+
+	if [[ -z ${__build_target__["SCRIPT_LATE"]} ]] ||
+	   [[ ${__build_cleanall} == true ]] ||
+	   [[ ${__build_stage["late"]} == false ]]; then
+		return;
+	fi
+
+	if ! exec_shell "${__build_target__["SCRIPT_LATE"]}" "${target}"; then
+		exit 1;
+	fi
+}
+
+function run_script_clean () {
+	local target=${1} command=${__build_command}
+
+	[[ -z ${__build_target__["SCRIPT_CLEAN"]} ]] && return;
+	[[ ${command} != *"clean"* ]] && return;
+
+	if ! exec_shell "${__build_target__["SCRIPT_CLEAN"]}" "${target}"; then
+		exit 1;
+	fi
+}
+
 function run_make () {
-	local target=$1
+	local target=${1}
 	local command=${__build_command}
 	local path=${__build_target__["MAKE_PATH"]}
 	local config=${__build_target__["MAKE_CONFIG"]}
@@ -661,8 +685,8 @@ function run_make () {
 	if [[ -z ${command} ]] ||
 	   [[ ${command} == rebuild ]] || [[ ${command} == cleanbuild ]]; then
 		for i in ${__build_target__["MAKE_TARGET"]}; do
-			i="$(echo "$i" | sed 's/[;,]//g') "
-			if ! exec_make "-C ${path} $arch_option $i $build_option" "${target}"; then
+			i="$(echo "${i}" | sed 's/[;,]//g') "
+			if ! exec_make "-C ${path} $arch_option ${i} $build_option" "${target}"; then
 				exit 1
 			fi
 		done
@@ -670,20 +694,6 @@ function run_make () {
 		if ! exec_make "-C ${path} $arch_option ${command} $build_option" "${target}"; then
 			exit 1
 		fi
-	fi
-}
-
-function run_script_post () {
-	local target=$1
-
-	if [[ -z ${__build_target__["SCRIPT_POST"]} ]] ||
-	   [[ ${__build_cleanall} == true ]] ||
-	   [[ ${__build_stage["post"]} == false ]]; then
-		return;
-	fi
-
-	if ! exec_shell "${__build_target__["SCRIPT_POST"]}" "${target}"; then
-		exit 1;
 	fi
 }
 
@@ -717,35 +727,8 @@ function run_result () {
 	done
 }
 
-function run_script_late () {
-	local target=$1
-
-	if [[ -z ${__build_target__["SCRIPT_LATE"]} ]] ||
-	   [[ ${__build_cleanall} == true ]] ||
-	   [[ ${__build_stage["late"]} == false ]]; then
-		return;
-	fi
-
-	if ! exec_shell "${__build_target__["SCRIPT_LATE"]}" "${target}"; then
-		exit 1;
-	fi
-}
-
-function run_script_clean () {
-	local target=$1 command=${__build_command}
-
-	[[ -z ${__build_target__["SCRIPT_CLEAN"]} ]] && return;
-	[[ ${command} != *"clean"* ]] && return;
-
-	if ! exec_shell "${__build_target__["SCRIPT_CLEAN"]}" "${target}"; then
-		exit 1;
-	fi
-}
-
-__build_target_stage=""
-
 function build_depend () {
-	local target=$1
+	local target=${1}
 
 	for d in ${__build_target__["BUILD_DEPEND"]}; do
 		[[ -z ${d} ]] && continue;
@@ -756,7 +739,7 @@ function build_depend () {
 }
 
 function build_target () {
-	local target=$1
+	local target=${1}
 
 	parse_target "${target}"
 
@@ -786,7 +769,7 @@ function build_run () {
 	print_env
 
 	for i in "${__build_target[@]}"; do
-		build_target "$i"
+		build_target "${i}"
 	done
 
 	[[ ${__build_cleanall} == true ]] &&
@@ -796,7 +779,7 @@ function build_run () {
 }
 
 function setup_config () {
-	local config=$1
+	local config=${1}
 
 	if [[ ! -f ${config} ]]; then
 		err " Not selected build scripts in ${config}"
@@ -807,7 +790,7 @@ function setup_config () {
 	source "${config}"
 	if [[ -z ${BUILD_IMAGES} ]]; then
 		err " Not defined 'BUILD_IMAGES'\n"
-		print_format
+		show_format
 		exit 1
 	fi
 
@@ -815,10 +798,10 @@ function setup_config () {
 }
 
 function store_config () {
-	local path=$1 script=$2
-	if [[ ! -f $(realpath "${__build_script_status_file}") ]]; then
-cat > "${__build_script_status_file}" <<EOF
-PATH   = $(realpath "${__build_script_dir}")
+	local path=${1} script=${2}
+	if [[ ! -f $(realpath "${__build_config_status}") ]]; then
+cat > "${__build_config_status}" <<EOF
+PATH   = $(realpath "${__build_config_dir}")
 CONFIG =
 EOF
 	fi
@@ -828,19 +811,19 @@ EOF
 			err " No such directory: ${path}"
 			exit 1;
 		fi
-		sed -i "s|^PATH.*|PATH = ${path}|" "${__build_script_status_file}"
+		sed -i "s|^PATH.*|PATH = ${path}|" "${__build_config_status}"
 	fi
 	if [[ -n ${script} ]]; then
 		if [[ ! -f $(realpath "${script}") ]]; then
 			err " No such script: ${path}"
 			exit 1;
 		fi
-		sed -i "s/^CONFIG.*/CONFIG = ${script}/" "${__build_script_status_file}"
+		sed -i "s/^CONFIG.*/CONFIG = ${script}/" "${__build_config_status}"
 	fi
 }
 
 function parse_config () {
-	local file=${__build_script_status_file}
+	local file=${__build_config_status}
 	local str ret
 
 	[[ ! -f ${file} ]] && return;
@@ -848,22 +831,22 @@ function parse_config () {
 	str=$(sed -n '/^\<PATH\>/p' "${file}");
 	ret=$(echo "${str}" | cut -d'=' -f 2)
 	ret=$(echo "${ret}" | sed 's/[[:space:]]//g')
-	__build_script_dir="${ret# *}"
+	__build_config_dir="${ret# *}"
 
 	str=$(sed -n '/^\<CONFIG\>/p' "${file}");
 	ret=$(echo "${str}" | cut -d'=' -f 2)
 	ret=$(echo "${ret}" | sed 's/[[:space:]]//g')
-	__build_script_target="$(realpath "${__build_script_dir}/"${ret# *}"")"
+	__build_target_config="$(realpath "${__build_config_dir}/"${ret# *}"")"
 }
 
 function avail_configs () {
-	local table=$1	# parse table
-	local prefix=${__build_script_prefix}
-	local extension=${__build_script_extention}
+	local table=${1}	# parse table
+	local prefix=${__build_config_prefix}
+	local extension=${__build_config_extend}
 	local val value
 
-	if ! cd "${__build_script_dir}"; then
-		err " Not found ${__build_script_dir}"
+	if ! cd "${__build_config_dir}"; then
+		err " Not found ${__build_config_dir}"
 		exit 1;
 	fi
 
@@ -871,28 +854,28 @@ function avail_configs () {
 		2> >(grep -v 'No such file or directory' >&2) | \
 		grep -F "./${prefix}" | sort)
 
-	for i in $value; do
-		i="$(echo "$i" | cut -d'/' -f2)"
-		[[ -n $(echo "$i" | awk -F".${prefix}" '{print $2}') ]] && continue;
-		[[ $i == *common* ]] && continue;
-		[[ "${i##*.}" != $extension ]] && continue;
-		val="${val} $(echo "$i" | awk -F".${prefix}" '{print $1}')"
-		eval "$table=(\"${val}\")"
+	for i in ${value}; do
+		i="$(echo "${i}" | cut -d'/' -f2)"
+		[[ -n $(echo "${i}" | awk -F".${prefix}" '{print $2}') ]] && continue;
+		[[ ${i} == *common* ]] && continue;
+		[[ "${i##*.}" != ${extension} ]] && continue;
+		val="${val} $(echo "${i}" | awk -F".${prefix}" '{print $1}')"
+		eval "${table}=(\"${val}\")"
 	done
 }
 
 function menu_config () {
-	local table=$1 string=$2
-	local result=$3 # return value
+	local table=${1} string=${2}
+	local result=${3} # return value
 	local select
 	local -a entry
 
 	for i in ${table}; do
 		stat="OFF"
-		entry+=( "$i" )
+		entry+=( "${i}" )
 		entry+=( " " )
-		[[ $i == "$(basename "${!result}")" ]] && stat="ON";
-		entry+=( "$stat" )
+		[[ ${i} == "$(basename "${!result}")" ]] && stat="ON";
+		entry+=( "${stat}" )
 	done
 
 	if ! which whiptail > /dev/null 2>&1; then
@@ -900,35 +883,35 @@ function menu_config () {
 		exit 1
 	fi
 
-	select=$(whiptail --title "Target $string" \
-		--radiolist "Choose a $string" 0 50 ${#entry[@]} -- "${entry[@]}" \
+	select=$(whiptail --title "Target ${string}" \
+		--radiolist "Choose a ${string}" 0 50 ${#entry[@]} -- "${entry[@]}" \
 		3>&1 1>&2 2>&3)
-	[[ -z $select ]] && exit 1;
+	[[ -z ${select} ]] && exit 1;
 
-	eval "$result=(\"${select}\")"
+	eval "${result}=(\"${select}\")"
 }
 
 function menu_save () {
 	if ! (whiptail --title "Save/Exit" --yesno "Save" 8 78); then
 		exit 1;
 	fi
-	store_config "" "${__build_script_target}"
+	store_config "" "${__build_target_config}"
 }
 
 function set_build_stage () {
 	for i in "${!__build_stage[@]}"; do
-		if [[ $i == "$1" ]]; then
+		if [[ ${i} == "${1}" ]]; then
 			for n in "${!__build_stage[@]}"; do
-				__build_stage[$n]=false
+				__build_stage[${n}]=false
 			done
-			__build_stage[$i]=true
+			__build_stage[${i}]=true
 			return
 		fi
 	done
 
-	echo -ne "\n\033[1;31m Not Support Stage Command: $i ( \033[0m"
+	echo -ne "\n\033[1;31m Not Support Stage Command: ${i} ( \033[0m"
 	for i in "${!__build_stage[@]}"; do
-		echo -n "$i "
+		echo -n "${i} "
 	done
 	echo -e "\033[1;31m)\033[0m\n"
 	exit 1;
@@ -936,8 +919,8 @@ function set_build_stage () {
 
 function parse_args () {
 	while getopts "f:t:c:Cj:o:s:D:mAilevVph" opt; do
-	case $opt in
-		f )	__build_script_target=$(realpath "${OPTARG}");;
+	case ${opt} in
+		f )	__build_target_config=$(realpath "${OPTARG}");;
 		t )	__build_target=("${OPTARG}")
 			until [[ $(eval "echo \${$OPTIND}") =~ ^-.* ]] || [[ -z "$(eval "echo \${$OPTIND}")" ]]; do
 				__build_target+=("$(eval "echo \${$OPTIND}")")
@@ -953,15 +936,15 @@ function parse_args () {
 		V )	__dbg_verbose=true; __dbg_trace=true;;
 		p )	__build_check_depend=false;;
 		o )	__build_append_option="${OPTARG}";;
-		D )	__build_script_dir=$(realpath "${OPTARG}")
-			store_config "${__build_script_dir}" ""
+		D )	__build_config_dir=$(realpath "${OPTARG}")
+			store_config "${__build_config_dir}" ""
 			exit 0;;
 		i ) 	__show_info=true;;
 		l )	__show_list=true;;
 		e )	__edit_script=true;
 			break;;
 		s ) 	set_build_stage "${OPTARG}";;
-		h )	usage;
+		h )	usage "${@: 2}";
 			exit 1;;
 	        * )	exit 1;;
 	esac
@@ -971,33 +954,33 @@ function parse_args () {
 ###############################################################################
 # Run build
 ###############################################################################
-if [[ $1 == "menuconfig" ]]; then
+if [[ ${1} == "menuconfig" ]]; then
 	parse_args "${@: 2}"
 else
 	parse_args "$@"
 fi
 
-if [[ -z ${__build_script_target} ]]; then
+if [[ -z ${__build_target_config} ]]; then
 	avail_list=
 	parse_config
 	avail_configs avail_list
 	if [[ $* == *"menuconfig"* && ${__build_command} != "menuconfig" ]]; then
-		menu_config "$avail_list" "config" __build_script_target
+		menu_config "$avail_list" "config" __build_target_config
 		menu_save
-		msg "$(sed -e 's/^/ /' < "${__build_script_status_file}")"
+		msg "$(sed -e 's/^/ /' < "${__build_config_status}")"
 		exit 0;
 	fi
-	if [[ -z ${__build_script_target} ]]; then
-		err " Not selected build script in ${__build_script_dir}"
+	if [[ -z ${__build_target_config} ]]; then
+		err " Not selected build script in ${__build_config_dir}"
 		err " Set build script with -f <script> or menuconfig option"
 		exit 1;
 	fi
 fi
 
-setup_config "${__build_script_target}"
+setup_config "${__build_target_config}"
 
 if [[ "${__edit_script}" == true ]]; then
-	$EDIT_TOOL "${__build_script_target}"
+	$EDIT_TOOL "${__build_target_config}"
 	exit 0;
 fi
 
