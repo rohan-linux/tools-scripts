@@ -144,7 +144,7 @@ function usage () {
 	echo -e "  -u [arch]\t set architecture for the uInitrd with mkimage (${OT_OPTIONS["arch"]}"
 }
 
-while getopts 'hr:o:zude:' opt
+while getopts 'hr:o:u:zde:' opt
 do
 	case ${opt} in
 	r) ROOT_OPTIONS["rootdir"]=$OPTARG ;;
@@ -152,7 +152,7 @@ do
 	z) ROOT_OPTIONS["gzip"]=true ;;
 	u) ROOT_OPTIONS["uinitrd"]=true
 	   ROOT_OPTIONS["arch"]=$OPTARG;;
-        u) ROOT_OPTIONS["ramdisk"]=true
+        z) ROOT_OPTIONS["ramdisk"]=true
 	   ROOT_OPTIONS["disk_sz"]=$OPTARG;;
 	h | *)
 		usage
