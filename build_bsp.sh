@@ -8,13 +8,13 @@ eval "$(locale | sed -e 's/\(.*\)=.*/export \1=en_US.UTF-8/')"
 EDIT_TOOL="vim"	# editor with '-e' option
 
 # config script's environment elements
-declare -A __build_env__=(
+declare -A __bsp_env__=(
 	["CROSS_TOOL"]=" "
 	["RESULT_DIR"]=" "
 )
 
 # config script's target elements
-declare -A __build_target__=(
+declare -A __bsp_target__=(
 	["BUILD_DEPEND"]=" "	# target dependency, to support multiple targets, the separator is' '.
 	["BUILD_MANUAL"]=" "	# manual build, It true, does not support automatic build and must be built manually.
 	["CROSS_TOOL"]=" "	# make build crosstool compiler path (set CROSS_COMPILE=)
@@ -33,12 +33,12 @@ declare -A __build_target__=(
 	["SCRIPT_CLEAN"]=" "	# clean script for clean command.
 )
 
-__build_sh_dir="$(dirname "$(realpath "$0")")"
-__build_config_dir="${__build_sh_dir}/configs"
-__build_config_prefix="build."
-__build_config_extend="sh"
-__build_config_status="${__build_sh_dir}/.build_status"
-__build_log_dir=".log"	# save to result directory
+__bsp_script_dir="$(dirname "$(realpath "$0")")"
+__bsp_config_dir="${__bsp_script_dir}/configs"
+__bsp_config_info="${__bsp_script_dir}/.bsp_config"
+__bsp_config_prefix="build."
+__bsp_config_extend="sh"
+__bsp_log_dir=".log"	# save to result directory
 
 function show_format () {
 	echo -e " Format ...\n"
@@ -73,10 +73,11 @@ function usage () {
 	echo ""
 	echo " options:"
 	echo -ne "\t menuconfig\t Select the config with"
-	echo -ne " the prefix '${__build_config_prefix}' and extend '.${__build_config_extend}'"
+	echo -ne " the prefix '${__bsp_config_prefix}' and extend '.${__bsp_config_extend}'"
 	echo -e  " in the configs directory."
 	echo -e  "\t\t\t menuconfig is depended '-D' path"
-	echo -e  "\t-D [dir]\t set configs directory for the menuconfig\n"
+	echo -e  "\t-D [dir]\t set configs directory for the menuconfig"
+	echo -e  "\t-S [config]\t set build config file\n"
 	echo -e  "\t-t [target]\t set build targets, '<TARGET>' ..."
 	echo -e  "\t-c [command]\t run command"
 	echo -e  "\t\t\t support 'cleanbuild','rebuild' and commands supported by target"
@@ -90,7 +91,7 @@ function usage () {
 	echo -e  "\t-V\t\t show build log and enable external shell tasks tracing (with 'set -x')"
 	echo -e  "\t-p\t\t skip dependency"
 	echo -ne "\t-s [stage]\t build stage :"
-	for i in "${!__build_stage[@]}"; do
+	for i in "${!__bsp_stage[@]}"; do
 		echo -n " '${i}'";
 	done
 	echo -e  "\n\t\t\t stage order : prev > make > post > copy > late"
@@ -103,14 +104,14 @@ function usage () {
 function err () { echo -e "\033[0;31m$*\033[0m"; }
 function msg () { echo -e "\033[0;33m$*\033[0m"; }
 
-__build_target_config=""	# build script file
-__build_image=()	# store ${BUILD_IMAGES}
-__build_target=()
+__bsp_target_config=""	# build script file
+__bsp_image=()	# store ${BUILD_IMAGES}
+__bsp_target=()
 
-__build_command=""
-__build_cleanall=false
-__build_append_option=""
-__build_jobs="$(grep -c processor /proc/cpuinfo)"
+__bsp_command=""
+__bsp_cleanall=false
+__bsp_append_option=""
+__bsp_jobs="$(grep -c processor /proc/cpuinfo)"
 
 __show_info=false
 __show_list=false
@@ -118,13 +119,13 @@ __edit_script=false
 __dbg_verbose=false
 __dbg_trace=false
 
-__build_manual_targets=false
-__build_all_targets=false	# include manual targets
-__build_check_depend=true
-__build_target_stage=""
-__build_progress_pid=""
+__bsp_manual_targets=false
+__bsp_all_targets=false	# include manual targets
+__bsp_check_depend=true
+__bsp_target_stage=""
+__bsp_progress_pid=""
 
-declare -A __build_stage=(
+declare -A __bsp_stage=(
 	["prev"]=true		# execute script 'SCRIPT_PREV'
 	["make"]=true		# make with 'MAKE_PATH' and 'MAKE_TARGET'
 	["copy"]=true		# execute copy with 'RESULT_FILE and RESULT_NAME'
@@ -156,11 +157,11 @@ function run_progress () {
 	kill_progress
 	show_progress &
 	echo -en " $!"
-	__build_progress_pid=$!
+	__bsp_progress_pid=$!
 }
 
 function kill_progress () {
-	local pid=${__build_progress_pid}
+	local pid=${__bsp_progress_pid}
 	if pidof ${pid}; then return; fi
 	if [[ ${pid} -ne 0 ]] && [[ -e /proc/${pid} ]]; then
 		kill "${pid}" 2> /dev/null
@@ -172,20 +173,20 @@ function kill_progress () {
 trap kill_progress EXIT
 
 function print_env () {
-	echo -e "\n\033[1;32m BUILD STATUS       = ${__build_config_status}\033[0m";
-	echo -e "\033[1;32m BUILD CONFIG       = ${__build_target_config}\033[0m";
+	echo -e "\n\033[1;32m BUILD STATUS       = ${__bsp_config_info}\033[0m";
+	echo -e "\033[1;32m BUILD CONFIG       = ${__bsp_target_config}\033[0m";
 	echo ""
-	for key in "${!__build_env__[@]}"; do
-		[[ -z ${__build_env__[${key}]} ]] && continue;
-		message=$(printf " %-18s = %s\n" "${key}" "${__build_env__[${key}]}")
+	for key in "${!__bsp_env__[@]}"; do
+		[[ -z ${__bsp_env__[${key}]} ]] && continue;
+		message=$(printf " %-18s = %s\n" "${key}" "${__bsp_env__[${key}]}")
 		msg "${message}"
 	done
 }
 
 function parse_env () {
-	for key in "${!__build_env__[@]}"; do
+	for key in "${!__bsp_env__[@]}"; do
 		local val=""
-		for i in "${__build_image[@]}"; do
+		for i in "${__bsp_image[@]}"; do
 			if [[ ${i} = *"${key}"* ]]; then
 				local elem
 				elem="$(echo "${i}" | cut -d'=' -f 2-)"
@@ -195,13 +196,13 @@ function parse_env () {
 				break
 			fi
 		done
-		__build_env__[${key}]=${val}
+		__bsp_env__[${key}]=${val}
 	done
 
-	if [[ -z ${__build_env__["RESULT_DIR"]} ]]; then
-		__build_env__["RESULT_DIR"]="$(realpath "$(dirname "${0}")")/result"
+	if [[ -z ${__bsp_env__["RESULT_DIR"]} ]]; then
+		__bsp_env__["RESULT_DIR"]="$(realpath "$(dirname "${0}")")/result"
 	fi
-	__build_log_dir="${__build_env__["RESULT_DIR"]}/${__build_log_dir}"
+	__bsp_log_dir="${__bsp_env__["RESULT_DIR"]}/${__bsp_log_dir}"
 }
 
 function setup_env () {
@@ -220,19 +221,19 @@ function print_target () {
 	local target=${1}
 
 	echo -e "\n\033[1;32m BUILD TARGET       = ${target}\033[0m";
-	for key in "${!__build_target__[@]}"; do
-		[[ -z "${__build_target__[${key}]}" ]] && continue;
+	for key in "${!__bsp_target__[@]}"; do
+		[[ -z "${__bsp_target__[${key}]}" ]] && continue;
 		if [[ "${key}" == "MAKE_PATH" ]]; then
-			message=$(printf " %-18s = %s\n" "${key}" "$(realpath "${__build_target__[${key}]}")")
+			message=$(printf " %-18s = %s\n" "${key}" "$(realpath "${__bsp_target__[${key}]}")")
 		else
-			message=$(printf " %-18s = %s\n" "${key}" "${__build_target__[${key}]}")
+			message=$(printf " %-18s = %s\n" "${key}" "${__bsp_target__[${key}]}")
 		fi
 		msg "${message}"
 	done
 }
 
-declare -A __build_depend=()
-__build_depend_list=()
+declare -A __bsp_depend=()
+__bsp_depend_list=()
 
 function parse_depend () {
 	local target=${1}
@@ -240,7 +241,7 @@ function parse_depend () {
 	local key="BUILD_DEPEND"
 
 	# get target's contents
-	for i in "${__build_image[@]}"; do
+	for i in "${__bsp_image[@]}"; do
 		if [[ ${i} == *"${target}"* ]]; then
 			local elem
 			elem="$(echo $(echo "${i}" | cut -d'=' -f 1) | cut -d' ' -f 1)"
@@ -263,7 +264,7 @@ function parse_depend () {
 
 	# parse contents's elements
 	local val=""
-	__build_depend[${key}]=${val}
+	__bsp_depend[${key}]=${val}
 	if ! echo "$contents" | grep -qwn "${key}"; then return; fi
 
 	val="${contents#*${key}}"
@@ -273,7 +274,7 @@ function parse_depend () {
 	val="$(echo "${val}" | sed 's/^[ \t]*//;s/[ \t]*$//')"
 	val="$(echo "${val}" | sed 's/\s\s*/ /g')"
 
-	__build_depend[${key}]="${val}"
+	__bsp_depend[${key}]="${val}"
 }
 
 function parse_target () {
@@ -281,7 +282,7 @@ function parse_target () {
 	local contents found=false
 
 	# get target's contents
-	for i in "${__build_image[@]}"; do
+	for i in "${__bsp_image[@]}"; do
 		if [[ ${i} == *"${target}"* ]]; then
 			local elem
 			elem="$(echo $(echo "${i}" | cut -d'=' -f 1) | cut -d' ' -f 1)"
@@ -303,14 +304,14 @@ function parse_target () {
 	fi
 
 	# initialize
-	for key in "${!__build_target__[@]}"; do __build_target__[${key}]=""; done
+	for key in "${!__bsp_target__[@]}"; do __bsp_target__[${key}]=""; done
 
 	# parse contents's elements
-	for key in "${!__build_target__[@]}"; do
+	for key in "${!__bsp_target__[@]}"; do
 		local val=""
 		if ! echo "$contents" | grep -qwn "${key}"; then
-			__build_target__[${key}]=${val}
-			[[ ${key} == "BUILD_MANUAL" ]] && __build_target__[${key}]=false;
+			__bsp_target__[${key}]=${val}
+			[[ ${key} == "BUILD_MANUAL" ]] && __bsp_target__[${key}]=false;
 			continue;
 		fi
 
@@ -321,13 +322,13 @@ function parse_target () {
 		val="$(echo "${val}" | sed 's/^[ \t]*//;s/[ \t]*$//')"
 		val="$(echo "${val}" | sed 's/\s\s*/ /g')"
 
-		__build_target__[${key}]="${val}"
+		__bsp_target__[${key}]="${val}"
 	done
 
-	[[ -n ${__build_target__["MAKE_PATH"]} ]] && __build_target__["MAKE_PATH"]=$(realpath "${__build_target__["MAKE_PATH"]}");
-	[[ -z ${__build_target__["MAKE_TARGET"]} ]] && __build_target__["MAKE_TARGET"]="all";
-	[[ -z ${__build_target__["CROSS_TOOL"]} ]] && __build_target__["CROSS_TOOL"]=${__build_env__["CROSS_TOOL"]};
-	[[ -z ${__build_target__["MAKE_JOBS"]} ]] && __build_target__["MAKE_JOBS"]=$__build_jobs;
+	[[ -n ${__bsp_target__["MAKE_PATH"]} ]] && __bsp_target__["MAKE_PATH"]=$(realpath "${__bsp_target__["MAKE_PATH"]}");
+	[[ -z ${__bsp_target__["MAKE_TARGET"]} ]] && __bsp_target__["MAKE_TARGET"]="all";
+	[[ -z ${__bsp_target__["CROSS_TOOL"]} ]] && __bsp_target__["CROSS_TOOL"]=${__bsp_env__["CROSS_TOOL"]};
+	[[ -z ${__bsp_target__["MAKE_JOBS"]} ]] && __bsp_target__["MAKE_JOBS"]=$__bsp_jobs;
 }
 
 function check_depend () {
@@ -335,21 +336,21 @@ function check_depend () {
 
 	parse_depend "${target}"
 
-	if [[ -z ${__build_depend["BUILD_DEPEND"]} ]]; then
-		unset __build_depend_list[${#__build_depend_list[@]}-1]
+	if [[ -z ${__bsp_depend["BUILD_DEPEND"]} ]]; then
+		unset __bsp_depend_list[${#__bsp_depend_list[@]}-1]
 		return
 	fi
 
-        for d in ${__build_depend["BUILD_DEPEND"]}; do
-		if [[ " ${__build_depend_list[@]} " =~ "${d}" ]]; then
+        for d in ${__bsp_depend["BUILD_DEPEND"]}; do
+		if [[ " ${__bsp_depend_list[@]} " =~ "${d}" ]]; then
 			echo -e "\033[1;31m Error recursive, Check 'BUILD_DEPEND':\033[0m"
-			echo -e "\033[1;31m\t${__build_depend_list[@]} $d\033[0m"
+			echo -e "\033[1;31m\t${__bsp_depend_list[@]} $d\033[0m"
 			exit 1;
 		fi
-		__build_depend_list+=("$d")
+		__bsp_depend_list+=("$d")
 		check_depend "$d"
         done
-	unset __build_depend_list[${#__build_depend_list[@]}-1]
+	unset __bsp_depend_list[${#__bsp_depend_list[@]}-1]
 }
 
 function parse_target_list () {
@@ -357,14 +358,14 @@ function parse_target_list () {
 	local list_manuals=() list_targets=()
 	local dump_manuals=() dump_targets=()
 
-	for str in "${__build_image[@]}"; do
+	for str in "${__bsp_image[@]}"; do
 		local val add=true
 		str="$(echo "${str}" | tr '\n' ' ')"
 		val="$(echo "${str}" | cut -d'=' -f 1)"
 		val="$(echo -e "${val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
 		# skip buil environments"
-		for n in "${!__build_env__[@]}"; do
+		for n in "${!__bsp_env__[@]}"; do
 			if [[ ${n} == "${val}" ]]; then
 				add=false
 				break
@@ -375,7 +376,7 @@ function parse_target_list () {
 		[[ ${str} == *"="* ]] && target_list+=("${val}");
 	done
 
-	for i in "${__build_target[@]}"; do
+	for i in "${__bsp_target[@]}"; do
 		local found=false;
 		for n in "${target_list[@]}"; do
 			if [[ ${i} == "${n}" ]]; then
@@ -396,9 +397,9 @@ function parse_target_list () {
 
 	for t in "${target_list[@]}"; do
 		parse_target "${t}"
-		depend=${__build_target__["BUILD_DEPEND"]}
+		depend=${__bsp_target__["BUILD_DEPEND"]}
 		[[ -n ${depend} ]] && depend="depend: ${depend}";
-		if [[ ${__build_target__["BUILD_MANUAL"]} == true ]]; then
+		if [[ ${__bsp_target__["BUILD_MANUAL"]} == true ]]; then
 			list_manuals+=("${t}")
 			dump_manuals+=("$(printf "%-18s %s\n" "${t}" "${depend} ")")
 		else
@@ -407,22 +408,22 @@ function parse_target_list () {
 		fi
 	done
 
-	if [[ ${#__build_target[@]} -eq 0 ]]; then
-		__build_target=("${list_targets[@]}")
-		[[ $__build_manual_targets == true ]] && __build_target=("${list_manuals[@]}");
-		[[ $__build_all_targets == true ]] && __build_target=("${list_manuals[@]}" "${list_targets[@]}");
+	if [[ ${#__bsp_target[@]} -eq 0 ]]; then
+		__bsp_target=("${list_targets[@]}")
+		[[ $__bsp_manual_targets == true ]] && __bsp_target=("${list_manuals[@]}");
+		[[ $__bsp_all_targets == true ]] && __bsp_target=("${list_manuals[@]}" "${list_targets[@]}");
 	fi
 
 	# check dependency
-	if [[ ${__build_check_depend} == true ]]; then
-		for i in "${__build_target[@]}"; do
-			__build_depend_list+=("${i}")
+	if [[ ${__bsp_check_depend} == true ]]; then
+		for i in "${__bsp_target[@]}"; do
+			__bsp_depend_list+=("${i}")
 			check_depend "${i}"
 		done
 	fi
 
 	if [[ ${__show_list} == true ]]; then
-		echo -e "\033[1;32m BUILD CONFIG  = ${__build_target_config}\033[0m";
+		echo -e "\033[1;32m BUILD CONFIG  = ${__bsp_target_config}\033[0m";
 		echo -e "\033[0;33m TARGETS\033[0m";
 		for i in "${dump_targets[@]}"; do
 			echo -e "\033[0;33m  ${i}\033[0m";
@@ -440,7 +441,7 @@ function parse_target_list () {
 
 function exec_shell () {
 	local command=${1} target=${2}
-	local log="${__build_log_dir}/${target}.script.log"
+	local log="${__bsp_log_dir}/${target}.script.log"
 	local ret
 
 	[[ ${__dbg_trace} == true ]] && set -x;
@@ -491,7 +492,7 @@ function exec_shell () {
 
 function exec_make () {
 	local command=${1} target=${2}
-	local log="${__build_log_dir}/${target}.make.log"
+	local log="${__bsp_log_dir}/${target}.make.log"
 	local ret
 
 	command="$(echo "${command}" | sed 's/\s\s*/ /g')"
@@ -525,13 +526,13 @@ function exec_make () {
 function run_script_prev () {
 	local target=${1}
 
-	if [[ -z ${__build_target__["SCRIPT_PREV"]} ]] ||
-	   [[ ${__build_cleanall} == true ]] ||
-	   [[ ${__build_stage["prev"]} == false ]]; then
+	if [[ -z ${__bsp_target__["SCRIPT_PREV"]} ]] ||
+	   [[ ${__bsp_cleanall} == true ]] ||
+	   [[ ${__bsp_stage["prev"]} == false ]]; then
 		return;
 	fi
 
-	if ! exec_shell "${__build_target__["SCRIPT_PREV"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["SCRIPT_PREV"]}" "${target}"; then
 		exit 1;
 	fi
 }
@@ -539,13 +540,13 @@ function run_script_prev () {
 function run_script_post () {
 	local target=${1}
 
-	if [[ -z ${__build_target__["SCRIPT_POST"]} ]] ||
-	   [[ ${__build_cleanall} == true ]] ||
-	   [[ ${__build_stage["post"]} == false ]]; then
+	if [[ -z ${__bsp_target__["SCRIPT_POST"]} ]] ||
+	   [[ ${__bsp_cleanall} == true ]] ||
+	   [[ ${__bsp_stage["post"]} == false ]]; then
 		return;
 	fi
 
-	if ! exec_shell "${__build_target__["SCRIPT_POST"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["SCRIPT_POST"]}" "${target}"; then
 		exit 1;
 	fi
 }
@@ -553,36 +554,36 @@ function run_script_post () {
 function run_script_late () {
 	local target=${1}
 
-	if [[ -z ${__build_target__["SCRIPT_LATE"]} ]] ||
-	   [[ ${__build_cleanall} == true ]] ||
-	   [[ ${__build_stage["late"]} == false ]]; then
+	if [[ -z ${__bsp_target__["SCRIPT_LATE"]} ]] ||
+	   [[ ${__bsp_cleanall} == true ]] ||
+	   [[ ${__bsp_stage["late"]} == false ]]; then
 		return;
 	fi
 
-	if ! exec_shell "${__build_target__["SCRIPT_LATE"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["SCRIPT_LATE"]}" "${target}"; then
 		exit 1;
 	fi
 }
 
 function run_script_clean () {
-	local target=${1} command=${__build_command}
+	local target=${1} command=${__bsp_command}
 
-	[[ -z ${__build_target__["SCRIPT_CLEAN"]} ]] && return;
+	[[ -z ${__bsp_target__["SCRIPT_CLEAN"]} ]] && return;
 	[[ ${command} != *"clean"* ]] && return;
 
-	if ! exec_shell "${__build_target__["SCRIPT_CLEAN"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["SCRIPT_CLEAN"]}" "${target}"; then
 		exit 1;
 	fi
 }
 
 function run_make () {
 	local target=${1}
-	local command=${__build_command}
-	local path=${__build_target__["MAKE_PATH"]}
-	local config=${__build_target__["MAKE_CONFIG"]}
-	local build_option="${__build_target__["MAKE_OPTION"]} -j${__build_target__["MAKE_JOBS"]} "
+	local command=${__bsp_command}
+	local path=${__bsp_target__["MAKE_PATH"]}
+	local config=${__bsp_target__["MAKE_CONFIG"]}
+	local build_option="${__bsp_target__["MAKE_OPTION"]} -j${__bsp_target__["MAKE_JOBS"]} "
 	local stage_file="${path}/.${target}_defconfig"
-	local stage="BUILD:${config}:${__build_target__["MAKE_OPTION"]}"
+	local stage="BUILD:${config}:${__bsp_target__["MAKE_OPTION"]}"
 	local arch_option
 	declare -A mode=(
 		["distclean"]=false
@@ -593,24 +594,24 @@ function run_make () {
 
 	if [[ -z ${path} ]] || [[ ! -d ${path} ]]; then
 		[[ -z ${path} ]] && return;
-		err " Not found 'MAKE_PATH': '${__build_target__["MAKE_PATH"]}'"
+		err " Not found 'MAKE_PATH': '${__bsp_target__["MAKE_PATH"]}'"
 		exit 1;
 	fi
 
-	if [[ ${__build_stage["make"]} == false ]] ||
+	if [[ ${__bsp_stage["make"]} == false ]] ||
 	   [[ ! -f ${path}/makefile && ! -f ${path}/Makefile ]]; then
 		return
 	fi
 
-	if [[ ${__build_target__["MAKE_ARCH"]} ]]; then
-		arch_option="ARCH=${__build_target__["MAKE_ARCH"]} "
+	if [[ ${__bsp_target__["MAKE_ARCH"]} ]]; then
+		arch_option="ARCH=${__bsp_target__["MAKE_ARCH"]} "
 	fi
 
-	if [[ ${__build_target__["CROSS_TOOL"]} ]]; then
-		arch_option+="CROSS_COMPILE=${__build_target__["CROSS_TOOL"]} "
+	if [[ ${__bsp_target__["CROSS_TOOL"]} ]]; then
+		arch_option+="CROSS_COMPILE=${__bsp_target__["CROSS_TOOL"]} "
 	fi
 
-	[[ -n $__build_append_option ]] && build_option+="$__build_append_option";
+	[[ -n $__bsp_append_option ]] && build_option+="$__bsp_append_option";
 
 	if [[ ${command} == clean ]] || [[ ${command} == cleanbuild ]] ||
 	   [[ ${command} == rebuild ]]; then
@@ -645,7 +646,7 @@ function run_make () {
 
 	# make clean
 	if [[ ${mode["clean"]} == true ]]; then
-		if [[ ${__build_target__["MAKE_NOT_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_NOT_CLEAN"]} != true ]]; then
 			exec_make "-C ${path} clean" "${target}"
 		fi
 		if [[ ${command} == clean ]]; then
@@ -656,11 +657,11 @@ function run_make () {
 
 	# make distclean
 	if [[ ${mode["distclean"]} == true ]]; then
-		if [[ ${__build_target__["MAKE_NOT_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_NOT_CLEAN"]} != true ]]; then
 			exec_make "-C ${path} distclean" "${target}"
 		fi
-		[[ ${command} == distclean ]] || [[ ${__build_cleanall} == true ]] && rm -f "$stage_file";
-		[[ ${__build_cleanall} == true ]] && return;
+		[[ ${command} == distclean ]] || [[ ${__bsp_cleanall} == true ]] && rm -f "$stage_file";
+		[[ ${__bsp_cleanall} == true ]] && return;
 		if [[ ${command} == distclean ]]; then
 			run_script_clean "${target}"
 			exit 0;
@@ -684,7 +685,7 @@ function run_make () {
 	# make targets
 	if [[ -z ${command} ]] ||
 	   [[ ${command} == rebuild ]] || [[ ${command} == cleanbuild ]]; then
-		for i in ${__build_target__["MAKE_TARGET"]}; do
+		for i in ${__bsp_target__["MAKE_TARGET"]}; do
 			i="$(echo "${i}" | sed 's/[;,]//g') "
 			if ! exec_make "-C ${path} $arch_option ${i} $build_option" "${target}"; then
 				exit 1
@@ -698,13 +699,13 @@ function run_make () {
 }
 
 function run_result () {
-	local path=${__build_target__["MAKE_PATH"]}
-	local file=${__build_target__["RESULT_FILE"]}
-	local dir=${__build_env__["RESULT_DIR"]}
-	local ret=${__build_target__["RESULT_NAME"]}
+	local path=${__bsp_target__["MAKE_PATH"]}
+	local file=${__bsp_target__["RESULT_FILE"]}
+	local dir=${__bsp_env__["RESULT_DIR"]}
+	local ret=${__bsp_target__["RESULT_NAME"]}
 
-	if [[ -z ${file} ]] || [[ ${__build_cleanall} == true ]] ||
-	   [[ ${__build_stage["copy"]} == false ]]; then
+	if [[ -z ${file} ]] || [[ ${__bsp_cleanall} == true ]] ||
+	   [[ ${__bsp_stage["copy"]} == false ]]; then
 		return;
 	fi
 
@@ -730,7 +731,7 @@ function run_result () {
 function build_depend () {
 	local target=${1}
 
-	for d in ${__build_target__["BUILD_DEPEND"]}; do
+	for d in ${__bsp_target__["BUILD_DEPEND"]}; do
 		[[ -z ${d} ]] && continue;
 		# echo -e "\n\033[1;32m BUILD DEPEND       = ${target} ---> $d\033[0m";
 		build_target "${d}";
@@ -744,18 +745,18 @@ function build_target () {
 	parse_target "${target}"
 
 	# build dependency
-	if [[ ${__build_check_depend} == true ]]; then
+	if [[ ${__bsp_check_depend} == true ]]; then
 		build_depend "${target}"
-		if echo "${__build_target_stage}" | grep -qwn "${target}"; then return; fi
-		__build_target_stage+="${target} "
+		if echo "${__bsp_target_stage}" | grep -qwn "${target}"; then return; fi
+		__bsp_target_stage+="${target} "
 	fi
 
 	print_target "${target}"
 	[[ ${__show_info} == true ]] && return;
-	if ! mkdir -p "${__build_env__["RESULT_DIR"]}"; then exit 1; fi
-	if ! mkdir -p "${__build_log_dir}"; then exit 1; fi
+	if ! mkdir -p "${__bsp_env__["RESULT_DIR"]}"; then exit 1; fi
+	if ! mkdir -p "${__bsp_log_dir}"; then exit 1; fi
 
-	setup_env "${__build_target__["CROSS_TOOL"]}"
+	setup_env "${__bsp_target__["CROSS_TOOL"]}"
 	run_script_prev "${target}"
 	run_make "${target}"
 	run_script_post "${target}"
@@ -768,12 +769,12 @@ function build_run () {
 	parse_target_list
 	print_env
 
-	for i in "${__build_target[@]}"; do
+	for i in "${__bsp_target[@]}"; do
 		build_target "${i}"
 	done
 
-	[[ ${__build_cleanall} == true ]] &&
-	[[ -d ${__build_log_dir} ]] && rm -rf "${__build_log_dir}";
+	[[ ${__bsp_cleanall} == true ]] &&
+	[[ -d ${__bsp_log_dir} ]] && rm -rf "${__bsp_log_dir}";
 
 	show_build_time
 }
@@ -794,14 +795,15 @@ function setup_config () {
 		exit 1
 	fi
 
-	__build_image=("${BUILD_IMAGES[@]}");
+	__bsp_image=("${BUILD_IMAGES[@]}");
 }
 
 function store_config () {
 	local path=${1} script=${2}
-	if [[ ! -f $(realpath "${__build_config_status}") ]]; then
-cat > "${__build_config_status}" <<EOF
-PATH   = $(realpath "${__build_config_dir}")
+
+	if [[ ! -f $(realpath "${__bsp_config_info}") ]]; then
+cat > "${__bsp_config_info}" <<EOF
+PATH   = $(realpath "${__bsp_config_dir}")
 CONFIG =
 EOF
 	fi
@@ -811,19 +813,21 @@ EOF
 			err " No such directory: ${path}"
 			exit 1;
 		fi
-		sed -i "s|^PATH.*|PATH = ${path}|" "${__build_config_status}"
+		sed -i "s|^PATH.*|PATH = ${path}|" "${__bsp_config_info}"
+                __bsp_config_dir=${path}
 	fi
+
 	if [[ -n ${script} ]]; then
-		if [[ ! -f $(realpath "${script}") ]]; then
+		if [[ ! -f $(realpath "${__bsp_config_dir}/${script}") ]]; then
 			err " No such script: ${path}"
 			exit 1;
 		fi
-		sed -i "s/^CONFIG.*/CONFIG = ${script}/" "${__build_config_status}"
+		sed -i "s/^CONFIG.*/CONFIG = ${script}/" "${__bsp_config_info}"
 	fi
 }
 
 function parse_config () {
-	local file=${__build_config_status}
+	local file=${__bsp_config_info}
 	local str ret
 
 	[[ ! -f ${file} ]] && return;
@@ -831,34 +835,29 @@ function parse_config () {
 	str=$(sed -n '/^\<PATH\>/p' "${file}");
 	ret=$(echo "${str}" | cut -d'=' -f 2)
 	ret=$(echo "${ret}" | sed 's/[[:space:]]//g')
-	__build_config_dir="${ret# *}"
+	__bsp_config_dir="${ret# *}"
 
 	str=$(sed -n '/^\<CONFIG\>/p' "${file}");
 	ret=$(echo "${str}" | cut -d'=' -f 2)
 	ret=$(echo "${ret}" | sed 's/[[:space:]]//g')
-	__build_target_config="$(realpath "${__build_config_dir}/"${ret# *}"")"
+	__bsp_target_config="$(realpath "${__bsp_config_dir}/"${ret# *}"")"
 }
 
 function avail_configs () {
 	local table=${1}	# parse table
-	local prefix=${__build_config_prefix}
-	local extension=${__build_config_extend}
+	local prefix=${__bsp_config_prefix}
+	local extend=${__bsp_config_extend}
+        local path=${__bsp_config_dir}
 	local val value
 
-	if ! cd "${__build_config_dir}"; then
-		err " Not found ${__build_config_dir}"
-		exit 1;
-	fi
-
-	value=$(find ./ -print \
+	value=$(find ${path} -print \
 		2> >(grep -v 'No such file or directory' >&2) | \
-		grep -F "./${prefix}" | sort)
-
+		grep -F "${prefix}" | sort)
 	for i in ${value}; do
-		i="$(echo "${i}" | cut -d'/' -f2)"
+                i="$(echo "$(basename ${i})" | cut -d'/' -f2)"
 		[[ -n $(echo "${i}" | awk -F".${prefix}" '{print $2}') ]] && continue;
 		[[ ${i} == *common* ]] && continue;
-		[[ "${i##*.}" != ${extension} ]] && continue;
+		[[ "${i##*.}" != ${extend} ]] && continue;
 		val="${val} $(echo "${i}" | awk -F".${prefix}" '{print $1}')"
 		eval "${table}=(\"${val}\")"
 	done
@@ -895,22 +894,22 @@ function menu_save () {
 	if ! (whiptail --title "Save/Exit" --yesno "Save" 8 78); then
 		exit 1;
 	fi
-	store_config "" "${__build_target_config}"
+	store_config "" "${__bsp_target_config}"
 }
 
 function set_build_stage () {
-	for i in "${!__build_stage[@]}"; do
+	for i in "${!__bsp_stage[@]}"; do
 		if [[ ${i} == "${1}" ]]; then
-			for n in "${!__build_stage[@]}"; do
-				__build_stage[${n}]=false
+			for n in "${!__bsp_stage[@]}"; do
+				__bsp_stage[${n}]=false
 			done
-			__build_stage[${i}]=true
+			__bsp_stage[${i}]=true
 			return
 		fi
 	done
 
 	echo -ne "\n\033[1;31m Not Support Stage Command: ${i} ( \033[0m"
-	for i in "${!__build_stage[@]}"; do
+	for i in "${!__bsp_stage[@]}"; do
 		echo -n "${i} "
 	done
 	echo -e "\033[1;31m)\033[0m\n"
@@ -918,26 +917,30 @@ function set_build_stage () {
 }
 
 function parse_args () {
-	while getopts "f:t:c:Cj:o:s:D:mAilevVph" opt; do
+	while getopts "f:t:c:Cj:o:s:D:S:mAilevVph" opt; do
 	case ${opt} in
-		f )	__build_target_config=$(realpath "${OPTARG}");;
-		t )	__build_target=("${OPTARG}")
+		f )	__bsp_target_config=$(realpath "${OPTARG}");;
+		t )	__bsp_target=("${OPTARG}")
 			until [[ $(eval "echo \${$OPTIND}") =~ ^-.* ]] || [[ -z "$(eval "echo \${$OPTIND}")" ]]; do
-				__build_target+=("$(eval "echo \${$OPTIND}")")
+				__bsp_target+=("$(eval "echo \${$OPTIND}")")
 				OPTIND=$((OPTIND + 1))
 			done
 			;;
-		c )	__build_command="${OPTARG}";;
-		m )	__build_manual_targets=true;;
-		A )	__build_all_targets=true;;
-		C )	__build_cleanall=true; __build_command="distclean";;
-		j )	__build_jobs=${OPTARG};;
+		c )	__bsp_command="${OPTARG}";;
+		m )	__bsp_manual_targets=true;;
+		A )	__bsp_all_targets=true;;
+		C )	__bsp_cleanall=true; __bsp_command="distclean";;
+		j )	__bsp_jobs=${OPTARG};;
 		v )	__dbg_verbose=true;;
 		V )	__dbg_verbose=true; __dbg_trace=true;;
-		p )	__build_check_depend=false;;
-		o )	__build_append_option="${OPTARG}";;
-		D )	__build_config_dir=$(realpath "${OPTARG}")
-			store_config "${__build_config_dir}" ""
+		p )	__bsp_check_depend=false;;
+		o )	__bsp_append_option="${OPTARG}";;
+		D )	__bsp_config_dir=$(realpath "${OPTARG}")
+			store_config "${__bsp_config_dir}" ""
+			exit 0;;
+		S)      __bsp_config_dir=$(dirname "$(realpath "${OPTARG}")")
+                        __bsp_target_config=$(basename "$(realpath "${OPTARG}")")
+                        store_config "${__bsp_config_dir}" "${__bsp_target_config}"
 			exit 0;;
 		i ) 	__show_info=true;;
 		l )	__show_list=true;;
@@ -957,30 +960,30 @@ function parse_args () {
 if [[ ${1} == "menuconfig" ]]; then
 	parse_args "${@: 2}"
 else
-	parse_args "$@"
+	parse_args "${@}"
 fi
 
-if [[ -z ${__build_target_config} ]]; then
-	avail_list=
+if [[ -z ${__bsp_target_config} ]]; then
+        avail_list=()
 	parse_config
 	avail_configs avail_list
-	if [[ $* == *"menuconfig"* && ${__build_command} != "menuconfig" ]]; then
-		menu_config "$avail_list" "config" __build_target_config
+	if [[ $* == *"menuconfig"* && ${__bsp_command} != "menuconfig" ]]; then
+		menu_config "${avail_list}" "config" __bsp_target_config
 		menu_save
-		msg "$(sed -e 's/^/ /' < "${__build_config_status}")"
+		msg "$(sed -e 's/^/ /' < "${__bsp_config_info}")"
 		exit 0;
 	fi
-	if [[ -z ${__build_target_config} ]]; then
-		err " Not selected build script in ${__build_config_dir}"
+	if [[ -z ${__bsp_target_config} ]]; then
+		err " Not selected build script in ${__bsp_config_dir}"
 		err " Set build script with -f <script> or menuconfig option"
 		exit 1;
 	fi
 fi
 
-setup_config "${__build_target_config}"
+setup_config "${__bsp_target_config}"
 
 if [[ "${__edit_script}" == true ]]; then
-	$EDIT_TOOL "${__build_target_config}"
+	$EDIT_TOOL "${__bsp_target_config}"
 	exit 0;
 fi
 
