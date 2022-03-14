@@ -137,11 +137,11 @@ function usage () {
 	echo -e " Usage: $(basename ${0}) [options]"
 	echo -e " Make ramdisk image or rmafs cpio(initrd/uInitrd) image"
 	echo -e ""
-	echo -e "  -d [disk size]\t build ramdisk image with disk size, default is ramfs cpio image"
 	echo -e "  -r [root]\t set root directory"
 	echo -e "  -o [output]\t output image name"
 	echo -e "  -z\t\t gzip image (default ${ROOT_OPTIONS["gzip"]})"
-	echo -e "  -u [arch]\t set architecture for the uInitrd with mkimage (${OT_OPTIONS["arch"]}"
+        echo -e "  -d [disk sz]\t ramdisk: disk size for the ramdisk image (default ramfs cpio image)"
+	echo -e "  -u [arch]\t uInitrd: set architecture for the uInitrd with mkimage (${OT_OPTIONS["arch"]}"
 }
 
 while getopts 'hr:o:u:zde:' opt
