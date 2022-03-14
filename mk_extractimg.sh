@@ -29,7 +29,9 @@ function extract_cpio () {
 		exit 1;
 	fi
 
-	cd ${dir} && cpio -idmv -F ../${img} & wait
+        img=$(realpath $img)
+        msg "Extrace cpio: ${img} -> ${dir}"
+	cd ${dir} && cpio -idmv -F ${img} & wait
 }
 
 function decompress_gzip () {
