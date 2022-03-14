@@ -103,7 +103,6 @@ function build_cpio () {
 	fi
 
 	root=$(cd ${root} && pwd)
-	dir=$(cd "$(dirname "$0")" && pwd)
 	local rootsz=$(echo $(du -sh ${root}) | cut -f1 -d" ")
 
 	echo ""
