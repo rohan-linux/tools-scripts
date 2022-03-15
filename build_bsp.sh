@@ -22,15 +22,15 @@ declare -A __bsp_target__=(
 	["MAKE_PATH"]=" "	# make build source path
 	["MAKE_CONFIG"]=""	# make build default config(defconfig)
 	["MAKE_TARGET"]=""	# make build targets, to support multiple targets, the separator is';'
-	["MAKE_NOT_CLEAN"]=""	# if true do not support make clean commands
+	["MAKE_SKIP_CLEAN"]=""	# if true do not support make clean commands
 	["MAKE_OPTION"]=""	# make build option
 	["RESULT_FILE"]=""	# make built images to copy resultdir, to support multiple targets, the separator is';'
 	["RESULT_NAME"]=""	# copy names to RESULT_DIR, to support multiple targets, the separator is';'
 	["MAKE_JOBS"]=" "	# make build jobs number (-j n)
-	["SCRIPT_PREV"]=" "	# previous build script before make build.
-	["SCRIPT_POST"]=""	# post build script after make build before copy 'RESULT_FILE' done.
-	["SCRIPT_LATE"]=""	# late build script after copy 'RESULT_FILE' done.
-	["SCRIPT_CLEAN"]=" "	# clean script for clean command.
+	["BUILD_PREV"]=" "	# previous build script before make build.
+	["BUILD_POST"]=""	# post build script after make build before copy 'RESULT_FILE' done.
+	["BUILD_LAST"]=""	# late build script after copy 'RESULT_FILE' done.
+	["BUILD_CLEAN"]=" "	# clean script for clean command.
 )
 
 __bsp_script_dir="$(dirname "$(realpath "$0")")"
@@ -54,15 +54,15 @@ function show_format () {
 	echo -e "\t\t MAKE_PATH       : < make build source path > ,"
 	echo -e "\t\t MAKE_CONFIG     : < make build default config(defconfig) > ,"
 	echo -e "\t\t MAKE_TARGET     : < make build targets, to support multiple targets, the separator is';' > ,"
-	echo -e "\t\t MAKE_NOT_CLEAN  : < if true do not support make clean commands > ,"
+	echo -e "\t\t MAKE_SKIP_CLEAN : < if true do not support make clean commands > ,"
 	echo -e "\t\t MAKE_OPTION     : < make build option > ,"
 	echo -e "\t\t RESULT_FILE     : < make built images to copy resultdir, to support multiple file, the separator is';' > ,"
 	echo -e "\t\t RESULT_NAME     : < copy names to RESULT_DIR, to support multiple name, the separator is';' > ,"
 	echo -e "\t\t MAKE_JOBS       : < make build jobs number (-j n) > ,"
-	echo -e "\t\t SCRIPT_PREV     : < previous build script before make build. > ,"
-	echo -e "\t\t SCRIPT_POST     : < post build script after make build before copy 'RESULT_FILE' done. > ,"
-	echo -e "\t\t SCRIPT_LATE     : < late build script after copy 'RESULT_FILE' done. > ,"
-	echo -e "\t\t SCRIPT_CLEAN    : < clean script for clean command. > \","
+	echo -e "\t\t BUILD_PREV      : < previous build before make build. > ,"
+	echo -e "\t\t BUILD_POST      : < post build after make build before copy 'RESULT_FILE' done. > ,"
+	echo -e "\t\t BUILD_LAST      : < last build after copy 'RESULT_FILE' done. > ,"
+	echo -e "\t\t BUILD_CLEAN     : < clean for clean command. > \","
 	echo -e ""
 }
 
@@ -82,7 +82,7 @@ function usage () {
 	echo -e  "\t-t [target]\t set build targets, '<TARGET>' ..."
 	echo -e  "\t-c [command]\t run command"
 	echo -e  "\t\t\t support 'cleanbuild','rebuild' and commands supported by target"
-	echo -e  "\t-C\t\t clean all targets, this option run make clean/distclean and 'SCRIPT_CLEAN'"
+	echo -e  "\t-C\t\t clean all targets, this option run make clean/distclean and 'BUILD_CLEAN'"
 	echo -e  "\t-i\t\t show target config info"
 	echo -e  "\t-l\t\t listup targets"
 	echo -e  "\t-j [jops]\t set build jobs"
@@ -126,11 +126,11 @@ __in_check_depend=true
 __in_bsp_target_stage=""
 
 declare -A __bsp_stage=(
-	["prev"]=true		# execute script 'SCRIPT_PREV'
+	["prev"]=true		# execute script 'BUILD_PREV'
 	["make"]=true		# make with 'MAKE_PATH' and 'MAKE_TARGET'
 	["copy"]=true		# execute copy with 'RESULT_FILE and RESULT_NAME'
-	["post"]=true		# execute script 'SCRIPT_POST'
-	["late"]=true		# execute script 'SCRIPT_LATE'
+	["post"]=true		# execute script 'BUILD_POST'
+	["late"]=true		# execute script 'BUILD_LAST'
 )
 
 function show_build_time () {
@@ -526,13 +526,13 @@ function exec_make () {
 function run_script_prev () {
 	local target=${1}
 
-	if [[ -z ${__bsp_target__["SCRIPT_PREV"]} ]] ||
+	if [[ -z ${__bsp_target__["BUILD_PREV"]} ]] ||
 	   [[ ${__in_target_cleanall} == true ]] ||
 	   [[ ${__bsp_stage["prev"]} == false ]]; then
 		return;
 	fi
 
-	if ! exec_shell "${__bsp_target__["SCRIPT_PREV"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["BUILD_PREV"]}" "${target}"; then
 		exit 1;
 	fi
 }
@@ -540,13 +540,13 @@ function run_script_prev () {
 function run_script_post () {
 	local target=${1}
 
-	if [[ -z ${__bsp_target__["SCRIPT_POST"]} ]] ||
+	if [[ -z ${__bsp_target__["BUILD_POST"]} ]] ||
 	   [[ ${__in_target_cleanall} == true ]] ||
 	   [[ ${__bsp_stage["post"]} == false ]]; then
 		return;
 	fi
 
-	if ! exec_shell "${__bsp_target__["SCRIPT_POST"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["BUILD_POST"]}" "${target}"; then
 		exit 1;
 	fi
 }
@@ -554,13 +554,13 @@ function run_script_post () {
 function run_script_late () {
 	local target=${1}
 
-	if [[ -z ${__bsp_target__["SCRIPT_LATE"]} ]] ||
+	if [[ -z ${__bsp_target__["BUILD_LAST"]} ]] ||
 	   [[ ${__in_target_cleanall} == true ]] ||
 	   [[ ${__bsp_stage["late"]} == false ]]; then
 		return;
 	fi
 
-	if ! exec_shell "${__bsp_target__["SCRIPT_LATE"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["BUILD_LAST"]}" "${target}"; then
 		exit 1;
 	fi
 }
@@ -568,10 +568,10 @@ function run_script_late () {
 function run_script_clean () {
 	local target=${1} command=${__in_target_command}
 
-	[[ -z ${__bsp_target__["SCRIPT_CLEAN"]} ]] && return;
+	[[ -z ${__bsp_target__["BUILD_CLEAN"]} ]] && return;
 	[[ ${command} != *"clean"* ]] && return;
 
-	if ! exec_shell "${__bsp_target__["SCRIPT_CLEAN"]}" "${target}"; then
+	if ! exec_shell "${__bsp_target__["BUILD_CLEAN"]}" "${target}"; then
 		exit 1;
 	fi
 }
@@ -646,7 +646,7 @@ function run_make () {
 
 	# make clean
 	if [[ ${mode["clean"]} == true ]]; then
-		if [[ ${__bsp_target__["MAKE_NOT_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_SKIP_CLEAN"]} != true ]]; then
 			exec_make "-C ${path} clean" "${target}"
 		fi
 		if [[ ${command} == clean ]]; then
@@ -657,7 +657,7 @@ function run_make () {
 
 	# make distclean
 	if [[ ${mode["distclean"]} == true ]]; then
-		if [[ ${__bsp_target__["MAKE_NOT_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_SKIP_CLEAN"]} != true ]]; then
 			exec_make "-C ${path} distclean" "${target}"
 		fi
 		[[ ${command} == distclean ]] || [[ ${__in_target_cleanall} == true ]] && rm -f "$stage_file";
