@@ -46,7 +46,7 @@ function decompress_gzip () {
 
 	gunzip -k ${img} & wait
 
-	extrace_image "${out}" "${dir}"
+	extract_image "${out}" "${dir}"
 	rm -rf ${out}
 	[[ ${out} != ${img} ]] && mv ${img} ${out}
 }
@@ -58,11 +58,11 @@ function decompress_lz4 () {
 	msg "Decompress lz4: ${img}"
 	lz4 -d "${img}" "${out}" & wait
 
-	extrace_image "${out}" "${dir}"
+	extract_image "${out}" "${dir}"
 	rm -rf ${out}
 }
 
-function extrace_image () {
+function extract_image () {
 	local img=${1} dir=${2}
 
 	if [[ ! -f ${img} ]]; then
@@ -107,5 +107,5 @@ if [[ -z "${__compress_image}" ]] || [[ -z "${__decompress_dir}" ]]; then
 	usage
 	exit 1
 fi
-extrace_image "${__compress_image}" "${__decompress_dir}"
+extract_image "${__compress_image}" "${__decompress_dir}"
 
