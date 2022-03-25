@@ -4,18 +4,28 @@
 #
 
 declare -A DISK_OPTIONS=(
-        ["disk"]=""
-        ["out"]=""
-        ["name"]="disk"
+        ["diskdir"]=""
+        ["output"]=""
+        ["output"]="disk"
         ["size"]=""
-        ["devloop"]="loop1"
-        ["mount"]="mnt"
+        ["loop"]="loop1"
         ["format"]="ext4"
-        ["mknode"]=false
+        ["node"]=false
+        ["compress"]="none"
 )
-BS_SIZE=1024
 
-function convert_hn_to_byte() {
+declare -A COMPRESS_FORMAT=(
+        ["gzip"]="compress_gzip"
+        ["lz4"]="compress_lz4"
+)
+
+BS_SIZE=1024
+MOUNT_DIR="mnt"
+
+function err () { echo -e "\033[0;31m$*\033[0m"; }
+function msg () { echo -e "\033[0;33m$*\033[0m"; }
+
+function hn_to_byte() {
 	local val=${1}
 	local ret=${2} # store calculated byte
 	local delmi="" mulitple=0
@@ -37,53 +47,55 @@ function convert_hn_to_byte() {
 	fi
 }
 
-#
-# get sudo permission
-#
-# return "sudo"
-#
-function sudo_permission () {
+function compress_gzip () {
+        gzip ${1}
+        mv ${1}.gz ${1}
+}
+
+function compress_lz4 () {
+        # "-l" compressed with legacy flag (v0.1-v0.9)
+        #      must be set this flags to boot kernel)
+        # "-9" High Compression
+	lz4 -l -9 ${1} ${1}.lz4 & wait
+        mv ${1}.lz4 ${1}
+}
+
+function sudo_perm () {
 	_user_=$(id | sed 's/^uid=//;s/(.*$//')
     if [[ 0 != ${_user_} ]]; then
-    	echo " Require root permission"
+        msg " Require root permission"
         _sudo_=${1}
         eval "${_sudo_}='sudo'"	# return sudo
         # test
         sudo losetup -a >> /dev/null
 	fi
 }
-sudo_permission _SUDO_
 
-function path_status () {
+function path_access () {
 	local path=${1}
+
 	if [[ -z ${path} ]] || [[ ! -d ${path} ]]; then
-		echo -e " - check path: ${path} ...."
+		msg " Not found: ${path} ...."
 		exit 1;
 	fi
 
 	if [[ ! -w "${path}" ]]; then
-		echo -e " You do not have write permission"
-		echo -e " Check permission: '${path}'"
+		err " You do not have write permission"
+		err " Check permission: '${path}'"
 		exit 1;
 	fi
 }
 
-#
-# make device node files
-#
-# input parameters
-# ${1}	= device path
-#
-function build_mkdev () {
+function make_devnode () {
 	local dir=${1}
 
-	echo ""
-	echo -n " [ Make Device Node: '${dir}'..."
+        sudo_perm _SUDO_
+
+	msg "[Make devnode]"
 	###
 	# make device nodes in /dev
 	###
 	devpath=${dir}/dev
-	path_status ${dir}
 
 	# miscellaneous one-of-a-kind stuff
 	[[ ! -c "${devpath}/console" ]] && ${_SUDO_} mknod ${devpath}/console	c 5 1;
@@ -112,132 +124,129 @@ function build_mkdev () {
 	for i in `seq 0 9`; do
 		[[ ! -c "${devpath}/tty${i}" ]] && ${_SUDO_} mknod ${devpath}/tty${i} c 4 ${i}
 	done
-	echo -e "\t Done]"
 }
 
 function build_disk () {
-	local disk="${DISK_OPTIONS["disk"]}"
-	local name="${DISK_OPTIONS["name"]}"
+	local disk="${DISK_OPTIONS["diskdir"]}"
+	local output="${DISK_OPTIONS["output"]}"
 	local size="${DISK_OPTIONS["size"]}"
-	local devloop="${DISK_OPTIONS["devloop"]}"
+	local loop="${DISK_OPTIONS["loop"]}"
 	local format="${DISK_OPTIONS["format"]}"
-	local mntdir="${DISK_OPTIONS["mount"]}"
-	local outdir="${DISK_OPTIONS["out"]}"
-	local mknode="${DISK_OPTIONS["mknode"]}"
-	local rootsz=$(echo $(du -s ${disk}) | cut -f1 -d" ")
+	local node="${DISK_OPTIONS["node"]}"
+	local compress=${DISK_OPTIONS["compress"]}
 
-	convert_hn_to_byte ${size} size
+	if [[ -z "${disk}" ]] || [[ -z "${output}" ]]; then
+	    err " Not set disk (${disk}) or output(${output}) ..."
+	    exit 1
+	fi
+
+	hn_to_byte ${size} size
 
 	# check path's status and permission
-	path_status ${disk}
-	path_status ${outdir}
+	path_access ${disk}
 
-	if [[ -z ${name} ]]; then name=disk; fi
-	if [[ -z ${format} ]]; then format=ext2; fi
-	if [[ -f ${name}.gz ]]; then rm -f ${name}.gz; fi
+	if [[ -z "${disk}" ]] || [[ -z "${output}" ]]; then
+	    err " Not set disk(${disk}) or output(${output}) ..."
+	    exit 1
+	fi
+	local disksz=$(echo $(du -sb ${disk}) | cut -f1 -d" ")
+        [[ -z ${size} ]] && size=$((( (${disksz} + 1048576 - 1) / 1048576 ) *1048576));
 
-	outdir=$(cd ${outdir} && pwd)
-	disk=$(cd ${disk} && pwd)
-	[[ -z ${size} ]] && size=$(du -sb ${disk} | cut -f 1);
+        msg "[Disk]"
+        msg " disk       = ${disk}"
+        msg " output     = ${output}"
+        msg " disk  size = ${disksz}"
+        msg " image size = ${size} : ${DISK_OPTIONS["size"]}"
+        msg " loop node  = ${loop}"
+        msg " format     = ${format}"
+        msg " compress   = $(echo ${compress} | cut -d ':' -f1)"
 
-	echo ""
-	echo -e " Make disk "
-	echo " disk from   = ${disk}"
-	echo " copy to     = ${outdir}/${name}"
-	echo " image size  = ${size}"
-      #	echo " loop node   = $devloop"
-      #	echo " fs format   = ${format}"
-
-	if [[ "${rootsz}" -gt "${size}" ]]; then
-		echo    ""
-		echo -e " FAIL: ${disk}(${rootsz}) is over disk image(${size}) \n"
+	if [[ ${disksz} -gt ${size} ]]; then
+		err " FAIL: ${disk}(${disksz}) is over disk image(${size})"
 		exit 1;
 	fi
 
+        sudo_perm _SUDO_
+
 	# umount previos mount
-	mount | grep -q ${name}
+	mount | grep -q ${output}
 	if [[ $? -eq 0 ]]; then
-		${_SUDO_} umount ${mntdir}
+		${_SUDO_} umount ${MOUNT_DIR}
 	else
-		mkdir -p ${mntdir}
+		mkdir -p ${MOUNT_DIR}
 	fi
 
-	path_status ${mntdir}
+	path_access ${MOUNT_DIR}
 
 	# build disk
-	dd if=/dev/zero of=${name} bs=${BS_SIZE} count=`expr ${size} / ${BS_SIZE}`;
-	yes | mke2fs  ${name} > /dev/null 2> /dev/null;
+	dd if=/dev/zero of=${output} bs=${BS_SIZE} count=`expr ${size} / ${BS_SIZE}`;
+	yes | mke2fs  ${output} > /dev/null 2> /dev/null;
 
 	# mount disk
-	${_SUDO_} mount -o loop ${name} ${mntdir};
+	${_SUDO_} mount -o loop ${output} ${MOUNT_DIR};
 
 	# copy files
-	${_SUDO_} cp -a ${disk}/* ${mntdir}/
+	${_SUDO_} cp -a ${disk}/* ${MOUNT_DIR}/
 
 	# build device nodes
-	if [[ ${mknode} == true ]]; then
-		build_mkdev ${mntdir}
+	if [[ ${node} == true ]]; then
+		make_devnode ${MOUNT_DIR}
 	fi
 
 	# exit disk
 	sleep 1	
-	${_SUDO_} umount ${mntdir};
-	gzip -f ${name}
-	chmod 666 ${name}.gz
-	rm -rf ${mntdir}
-
-	# copy image
-	if [[ ! -z ${outdir} ]] && [[ -d ${outdir} ]]; then
-		cp -f ${name}.gz ${outdir}/${name}
-		rm ${name}.gz
-	fi
+	${_SUDO_} umount ${MOUNT_DIR};
+	rm -rf ${MOUNT_DIR}
+        if [[ ${compress} != "none" ]]; then
+                compress=$(echo ${compress} | cut -d ':' -f2)
+               ${compress} ${output};
+        fi
 }
 
 function usage () {
-	echo "usage: $(basename ${0})"
-	echo "Make Disk Tool"
-	echo "------------------------------------------------------------------------------"
-	echo "root.img"
-	echo " - bootcommand : console=ttyX,<baudrate> root=/dev/ram0 rw initrd=<addr>,<size>M disk=<size>"
-	echo "------------------------------------------------------------------------------"
-	echo "  -r disk path to build disk"
-	echo "  -o out directory"
-	echo "  -n disk name (${DISK_OPTIONS["name"]})"
-	echo "  -s disk size, k,m,g (${DISK_OPTIONS["size"]})"
-#	echo "  -l set loop device (default loop1)"
-#	echo "  -f disk format (default ext2)"
-	echo "  -d build device node (default no)"
-	echo "  clean : remove rm *.img"
+	echo -e " Usage: $(basename ${0}) [options]"
+	echo -e " Make disk image"
+        echo -e " "
+	echo -e "  -r [dir]\t disk path"
+	echo -e "  -o [output]\t output image output"
+	echo -e "  -s disk size, k,m,g"
+#	echo -e "  -l set loop device (default loop1)"
+#	echo -e "  -f disk format (default ext2)"
+	echo -e "  -c [compress]\t compress: ${!COMPRESS_FORMAT[@]}"
+	echo -e "  -d build device node (default no)"
 }
 
-while getopts 'hr:o:n:s:l:f:de:' opt
+while getopts 'hr:o:s:l:f:c:d' opt
 do
 	case ${opt} in
-	r) DISK_OPTIONS["disk"]=$OPTARG ;;
-	o) DISK_OPTIONS["out"]=$OPTARG ;;
-	n) DISK_OPTIONS["name"]=$OPTARG ;;
-	s) DISK_OPTIONS["size"]=$OPTARG ;;
-	l) DISK_OPTIONS["devloop"]=$OPTARG ;;
-	f) DISK_OPTIONS["format"]=$OPTARG ;;
-	d) DISK_OPTIONS["mknode"]=true ;;
+	r) DISK_OPTIONS["diskdir"]=$OPTARG
+           ;;
+	o) DISK_OPTIONS["output"]=$OPTARG
+           ;;
+	s) DISK_OPTIONS["size"]=$OPTARG
+           ;;
+#	l) DISK_OPTIONS["loop"]=$OPTARG
+#          ;;
+#	f) DISK_OPTIONS["format"]=$OPTARG
+#          ;;
+	d) DISK_OPTIONS["node"]=true
+           ;;
+        c)
+                for i in "${!COMPRESS_FORMAT[@]}"; do
+                        [[ ${OPTARG} == ${i} ]] && DISK_OPTIONS["compress"]=${i}:${COMPRESS_FORMAT[${i}]}
+                done
+                if [[ ${DISK_OPTIONS["compress"]} == "none" ]]; then
+			err "Not support compress: ${OPTARG} !!!"
+                        usage
+                        exit 1;
+                fi
+                ;;
+
 	h | *)
 		usage
 		exit 1;;
 		esac
 done
-
-# no input parameter
-# no input parameter
-if [[ -z "${1}" ]]; then 
-	usage; exit 1; 
-fi
-
-# clean
-if [ "clean" = "${1}" ]; then
-	echo "make clean, rm *.img"
-	rm -f *.img
-	exit 1;
-fi
 
 build_disk
 
