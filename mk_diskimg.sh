@@ -5,13 +5,17 @@
 
 declare -A DISK_OPTIONS=(
         ["diskdir"]=""
-        ["output"]=""
         ["output"]="disk"
         ["size"]=""
         ["loop"]="loop1"
         ["format"]="ext4"
         ["node"]=false
         ["compress"]="none"
+)
+
+declare -A MNT_OPTIONS=(
+        ["image"]=""
+        ["mount"]=""
 )
 
 declare -A COMPRESS_FORMAT=(
@@ -24,6 +28,21 @@ MOUNT_DIR="mnt"
 
 function err () { echo -e "\033[0;31m$*\033[0m"; }
 function msg () { echo -e "\033[0;33m$*\033[0m"; }
+
+PROGNAME=${0##*/}
+function usage () {
+	echo -e " Usage: ${PROGNAME} [options]"
+        echo -e " "
+	echo -e " Make disk image"
+	echo -e "  -r [dir]            disk path"
+	echo -e "  -o [output]         output image output"
+	echo -e "  -s [size]           disk size, k,m,g"
+	echo -e "  -c [compress]       compress: ${!COMPRESS_FORMAT[@]}"
+	echo -e "  -d                  build device node (default no)"
+        echo -e " "
+	echo -e " Mount disk image"
+	echo -e "  -m [image] [mount]  mount disk image"
+}
 
 function hn_to_byte() {
 	local val=${1}
@@ -62,12 +81,12 @@ function compress_lz4 () {
 
 function sudo_perm () {
 	_user_=$(id | sed 's/^uid=//;s/(.*$//')
-    if [[ 0 != ${_user_} ]]; then
-        msg " Require root permission"
-        _sudo_=${1}
-        eval "${_sudo_}='sudo'"	# return sudo
-        # test
-        sudo losetup -a >> /dev/null
+        if [[ 0 != ${_user_} ]]; then
+                msg " Require root permission"
+                _sudo_=${1}
+                eval "${_sudo_}='sudo'"	# return sudo
+                # test
+                sudo losetup -a >> /dev/null
 	fi
 }
 
@@ -89,7 +108,7 @@ function path_access () {
 function make_devnode () {
 	local dir=${1}
 
-        sudo_perm _SUDO_
+        sudo_perm _sudo_
 
 	msg "[Make devnode]"
 	###
@@ -98,31 +117,31 @@ function make_devnode () {
 	devpath=${dir}/dev
 
 	# miscellaneous one-of-a-kind stuff
-	[[ ! -c "${devpath}/console" ]] && ${_SUDO_} mknod ${devpath}/console	c 5 1;
-	[[ ! -c "${devpath}/full"    ]] && ${_SUDO_} mknod ${devpath}/full 	c 1 7;
-	[[ ! -c "${devpath}/kmem"    ]] && ${_SUDO_} mknod ${devpath}/kmem 	c 1 2;
-	[[ ! -c "${devpath}/mem"     ]] && ${_SUDO_} mknod ${devpath}/mem 	c 1 1;
-	[[ ! -c "${devpath}/null"    ]] && ${_SUDO_} mknod ${devpath}/null 	c 1 3;
-	[[ ! -c "${devpath}/port"    ]] && ${_SUDO_} mknod ${devpath}/port 	c 1 4;
-	[[ ! -c "${devpath}/random"  ]] && ${_SUDO_} mknod ${devpath}/random 	c 1 8;
-	[[ ! -c "${devpath}/urandom" ]] && ${_SUDO_} mknod ${devpath}/urandom 	c 1 9;
-	[[ ! -c "${devpath}/zero"    ]] && ${_SUDO_} mknod ${devpath}/zero 	c 1 5;
-	[[ ! -c "${devpath}/tty"     ]] && ${_SUDO_} mknod ${devpath}/tty 	c 5 0
+	[[ ! -c "${devpath}/console" ]] && ${_sudo_} mknod ${devpath}/console	c 5 1;
+	[[ ! -c "${devpath}/full"    ]] && ${_sudo_} mknod ${devpath}/full 	c 1 7;
+	[[ ! -c "${devpath}/kmem"    ]] && ${_sudo_} mknod ${devpath}/kmem 	c 1 2;
+	[[ ! -c "${devpath}/mem"     ]] && ${_sudo_} mknod ${devpath}/mem 	c 1 1;
+	[[ ! -c "${devpath}/null"    ]] && ${_sudo_} mknod ${devpath}/null 	c 1 3;
+	[[ ! -c "${devpath}/port"    ]] && ${_sudo_} mknod ${devpath}/port 	c 1 4;
+	[[ ! -c "${devpath}/random"  ]] && ${_sudo_} mknod ${devpath}/random 	c 1 8;
+	[[ ! -c "${devpath}/urandom" ]] && ${_sudo_} mknod ${devpath}/urandom 	c 1 9;
+	[[ ! -c "${devpath}/zero"    ]] && ${_sudo_} mknod ${devpath}/zero 	c 1 5;
+	[[ ! -c "${devpath}/tty"     ]] && ${_sudo_} mknod ${devpath}/tty 	c 5 0
 	[[ ! -h "${devpath}/core"    ]] && ln -s /proc/kcore ${devpath}/core;
 
 	# loop devs
 	for i in `seq 0 7`; do
-		[[ ! -b "${devpath}/loop${i}" ]] && ${_SUDO_} mknod ${devpath}/loop${i} b 7 ${i};
+		[[ ! -b "${devpath}/loop${i}" ]] && ${_sudo_} mknod ${devpath}/loop${i} b 7 ${i};
 	done
 
 	# ram devs
 	for i in `seq 0 9`; do
-		[[ ! -b "${devpath}/ram${i}" ]] && ${_SUDO_} mknod ${devpath}/ram${i} b 1 ${i}
+		[[ ! -b "${devpath}/ram${i}" ]] && ${_sudo_} mknod ${devpath}/ram${i} b 1 ${i}
 	done
 
 	# ttys
 	for i in `seq 0 9`; do
-		[[ ! -c "${devpath}/tty${i}" ]] && ${_SUDO_} mknod ${devpath}/tty${i} c 4 ${i}
+		[[ ! -c "${devpath}/tty${i}" ]] && ${_sudo_} mknod ${devpath}/tty${i} c 4 ${i}
 	done
 }
 
@@ -137,6 +156,7 @@ function build_disk () {
 
 	if [[ -z "${disk}" ]] || [[ -z "${output}" ]]; then
 	    err " Not set disk (${disk}) or output(${output}) ..."
+            usage
 	    exit 1
 	fi
 
@@ -145,10 +165,6 @@ function build_disk () {
 	# check path's status and permission
 	path_access ${disk}
 
-	if [[ -z "${disk}" ]] || [[ -z "${output}" ]]; then
-	    err " Not set disk(${disk}) or output(${output}) ..."
-	    exit 1
-	fi
 	local disksz=$(echo $(du -sb ${disk}) | cut -f1 -d" ")
         [[ -z ${size} ]] && size=$((( (${disksz} + 1048576 - 1) / 1048576 ) *1048576));
 
@@ -166,27 +182,25 @@ function build_disk () {
 		exit 1;
 	fi
 
-        sudo_perm _SUDO_
+        sudo_perm _sudo_
 
 	# umount previos mount
 	mount | grep -q ${output}
 	if [[ $? -eq 0 ]]; then
-		${_SUDO_} umount ${MOUNT_DIR}
+		${_sudo_} umount ${MOUNT_DIR}
 	else
-		mkdir -p ${MOUNT_DIR}
+                if ! mkdir -p "${MOUNT_DIR}"; then exit 1; fi
 	fi
-
-	path_access ${MOUNT_DIR}
 
 	# build disk
 	dd if=/dev/zero of=${output} bs=${BS_SIZE} count=`expr ${size} / ${BS_SIZE}`;
 	yes | mke2fs  ${output} > /dev/null 2> /dev/null;
 
 	# mount disk
-	${_SUDO_} mount -o loop ${output} ${MOUNT_DIR};
+	${_sudo_} mount -o loop ${output} ${MOUNT_DIR};
 
 	# copy files
-	${_SUDO_} cp -a ${disk}/* ${MOUNT_DIR}/
+	${_sudo_} cp -a ${disk}/* ${MOUNT_DIR}/
 
 	# build device nodes
 	if [[ ${node} == true ]]; then
@@ -195,7 +209,7 @@ function build_disk () {
 
 	# exit disk
 	sleep 1	
-	${_SUDO_} umount ${MOUNT_DIR};
+	${_sudo_} umount ${MOUNT_DIR};
 	rm -rf ${MOUNT_DIR}
         if [[ ${compress} != "none" ]]; then
                 compress=$(echo ${compress} | cut -d ':' -f2)
@@ -203,31 +217,55 @@ function build_disk () {
         fi
 }
 
-function usage () {
-	echo -e " Usage: $(basename ${0}) [options]"
-	echo -e " Make disk image"
-        echo -e " "
-	echo -e "  -r [dir]\t disk path"
-	echo -e "  -o [output]\t output image output"
-	echo -e "  -s disk size, k,m,g"
-#	echo -e "  -l set loop device (default loop1)"
-#	echo -e "  -f disk format (default ext2)"
-	echo -e "  -c [compress]\t compress: ${!COMPRESS_FORMAT[@]}"
-	echo -e "  -d build device node (default no)"
+function mount_disk () {
+        local img="${MNT_OPTIONS["image"]}"
+        local mnt="${MNT_OPTIONS["mount"]}"
+
+        if [[ -z ${img} ]] || [[ -z ${mnt} ]]; then
+                err " No image (${img}) or mount path (${mnt}) ..."
+                usage
+                exit 1;
+        fi
+        if [[ ! -f ${img} ]]; then
+                err " Not found disk image (${img})"
+                exit 1;
+        fi
+
+        mount | grep -q "${mnt}"
+	if [[ $? -eq 0 ]]; then
+                err " Already mounted: $mnt ($?)"
+                exit 1
+        fi
+
+        if ! mkdir -p "${mnt}"; then exit 1; fi
+
+        sudo_perm _sudo_
+
+        local so=$(${_sudo_} parted -s ${img} unit B print |\
+                sed 's/^ //g' |\
+                grep "^1 " |\
+                tr -s ' ' |\
+                cut -d ' ' -f2 |\
+                cut -d'B' -f1 )
+
+        msg " mount ${img} -> ${mnt} : start offset ${so}"
+        msg " $> ${_sudo_} mount -o ro,loop,offset=${so} ${img} ${mnt}"
+
+        ${_sudo_} mount -o ro,loop,offset=${so} ${img} ${mnt}
 }
 
-while getopts 'hr:o:s:l:f:c:d' opt
+while getopts 'hr:o:s:l:f:c:m:d' opt
 do
 	case ${opt} in
-	r) DISK_OPTIONS["diskdir"]=$OPTARG
+	r) DISK_OPTIONS["diskdir"]=${OPTARG}
            ;;
-	o) DISK_OPTIONS["output"]=$OPTARG
+	o) DISK_OPTIONS["output"]=${OPTARG}
            ;;
-	s) DISK_OPTIONS["size"]=$OPTARG
+	s) DISK_OPTIONS["size"]=${OPTARG}
            ;;
-#	l) DISK_OPTIONS["loop"]=$OPTARG
+#	l) DISK_OPTIONS["loop"]=${OPTARG}
 #          ;;
-#	f) DISK_OPTIONS["format"]=$OPTARG
+#	f) DISK_OPTIONS["format"]=${OPTARG}
 #          ;;
 	d) DISK_OPTIONS["node"]=true
            ;;
@@ -241,7 +279,14 @@ do
                         exit 1;
                 fi
                 ;;
-
+        m)
+                MNT_OPTIONS["image"]=$(echo ${OPTARG} | cut -d' ' -f1)
+	        if [[ ! $(eval "echo \${$OPTIND}") =~ ^-.* ]] && [[ -n "$(eval "echo \${$OPTIND}")" ]]; then
+                        MNT_OPTIONS["mount"]="$(eval "echo \${$OPTIND}")"
+                fi
+                mount_disk
+                exit;
+               ;;
 	h | *)
 		usage
 		exit 1;;
