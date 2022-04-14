@@ -41,8 +41,9 @@ function pack_cpio () {
 	local uinitrd=${RAMFS_OPTIONS["uinitrd"]}
 	local arch=${RAMFS_OPTIONS["arch"]}
 
-	if [[ -z "${root}" ]] || [[ -z "${output}" ]]; then 
+	if [[ ! -d "${root}" ]] || [[ -z "${output}" ]]; then
 	    err " Not set root(${root}) or output(${output}) ..."
+            usage
 	    exit 1
 	fi
 
