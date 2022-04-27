@@ -6,17 +6,6 @@ declare -A COMPRESS_FORMAT=(
         ["cpio"]="extract_cpio"
 ) 
 
-PROGNAME=${0##*/}
-function usage() {
-	echo " Usage: $PROGNAME -c <compressed img> -d <decompress dir>"	
-        echo ""
-	echo -e "  - Support:"
-	for i in "${!COMPRESS_FORMAT[@]}"; do
-                 echo -e "\t $i";
-	done
-	echo ""
-}
-
 function err () { echo -e "\033[0;31m$*\033[0m"; }
 function msg () { echo -e "\033[0;33m$*\033[0m"; }
 
@@ -30,7 +19,17 @@ function extract_cpio () {
 	fi
 
         img=$(realpath $img)
-        msg "Extrace cpio: ${img} -> ${dir}"
+        msg "Extract cpio: ${img} -> ${dir}"
+
+        # -i            : Extract files from an archive
+        # -d            : Create leading directories where needed
+        # -m            : Retain previous file modification times when creating files
+        # -v            : Verbosely list the files processed
+        # -F FILE-NAME  : Use this FILE-NAME instead of standard input
+        # ---------------------------------------------------------------------
+        # dump
+        # cpio -it < [cpio file]
+        # ---------------------------------------------------------------------
 	cd ${dir} && cpio -idmv -F ${img} & wait
 }
 
@@ -84,6 +83,17 @@ function extract_image () {
 	done
 	echo ""
         echo "-> $(file ${img})"
+}
+
+PROGNAME=${0##*/}
+function usage() {
+	echo " Usage: $PROGNAME -c <compressed img> -d <decompress dir>"
+        echo ""
+	echo -e "  - Support:"
+	for i in "${!COMPRESS_FORMAT[@]}"; do
+                 echo -e "\t $i";
+	done
+	echo ""
 }
 
 __compress_image=""
