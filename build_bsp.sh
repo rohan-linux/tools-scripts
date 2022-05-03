@@ -22,7 +22,7 @@ declare -A __bsp_target__=(
 	["MAKE_PATH"]=" "	# make build source path
 	["MAKE_CONFIG"]=""	# make build default config(defconfig)
 	["MAKE_TARGET"]=""	# make build targets, to support multiple targets, the separator is';'
-	["MAKE_SKIP_CLEAN"]=""	# if true do not support make clean commands
+	["MAKE_NO_CLEAN"]=""	# if true do not support make clean commands
 	["MAKE_OPTION"]=""	# make build option
 	["RESULT_FILE"]=""	# make built images to copy resultdir, to support multiple targets, the separator is';'
 	["RESULT_NAME"]=""	# copy names to RESULT_DIR, to support multiple targets, the separator is';'
@@ -54,7 +54,7 @@ function show_format () {
 	echo -e "\t\t MAKE_PATH       : < make build source path > ,"
 	echo -e "\t\t MAKE_CONFIG     : < make build default config(defconfig) > ,"
 	echo -e "\t\t MAKE_TARGET     : < make build targets, to support multiple targets, the separator is';' > ,"
-	echo -e "\t\t MAKE_SKIP_CLEAN : < if true do not support make clean commands > ,"
+	echo -e "\t\t MAKE_NO_CLEAN : < if true do not support make clean commands > ,"
 	echo -e "\t\t MAKE_OPTION     : < make build option > ,"
 	echo -e "\t\t RESULT_FILE     : < make built images to copy resultdir, to support multiple file, the separator is';' > ,"
 	echo -e "\t\t RESULT_NAME     : < copy names to RESULT_DIR, to support multiple name, the separator is';' > ,"
@@ -98,7 +98,7 @@ function usage () {
 	echo -e  "\n\t\t\t stage order : prev > make > post > copy > late"
 	echo -e  "\t-m\t\t build manual targets 'BUILD_MANUAL'"
 	echo -e  "\t-A\t\t Full build including manual build"
-	echo -e  "\t-h [option]\t 'format'"
+	echo -e  "\t-h [option]\t prints all help, option support 'format'"
 	echo ""
 }
 
@@ -646,7 +646,7 @@ function run_make () {
 
 	# make clean
 	if [[ ${mode["clean"]} == true ]]; then
-		if [[ ${__bsp_target__["MAKE_SKIP_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_NO_CLEAN"]} != true ]]; then
 			exec_make "-C ${path} clean" "${target}"
 		fi
 		if [[ ${command} == clean ]]; then
@@ -657,7 +657,7 @@ function run_make () {
 
 	# make distclean
 	if [[ ${mode["distclean"]} == true ]]; then
-		if [[ ${__bsp_target__["MAKE_SKIP_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_NO_CLEAN"]} != true ]]; then
 			exec_make "-C ${path} distclean" "${target}"
 		fi
 		[[ ${command} == distclean ]] || [[ ${__in_target_cleanall} == true ]] && rm -f "$stage_file";
