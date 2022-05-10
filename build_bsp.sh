@@ -22,14 +22,14 @@ declare -A __bsp_target__=(
 	["MAKE_PATH"]=" "	# make build source path
 	["MAKE_CONFIG"]=""	# make build default config(defconfig)
 	["MAKE_TARGET"]=""	# make build targets, to support multiple targets, the separator is';'
-	["MAKE_NO_CLEAN"]=""	# if true do not support make clean commands
+	["MAKE_NOCLEAN"]=""	# if true do not support make clean commands
 	["MAKE_OPTION"]=""	# make build option
-	["RESULT_FILE"]=""	# make built images to copy resultdir, to support multiple targets, the separator is';'
-	["RESULT_NAME"]=""	# copy names to RESULT_DIR, to support multiple targets, the separator is';'
+	["BUILD_OUTPUT"]=""	# make built output images to copy resultdir, to support multiple targets, the separator is';'
+	["BUILD_RESULT"]=""	# copy names to RESULT_DIR, to support multiple targets, the separator is';'
 	["MAKE_JOBS"]=" "	# make build jobs number (-j n)
 	["BUILD_PREV"]=" "	# previous build script before make build.
-	["BUILD_POST"]=""	# post build script after make build before copy 'RESULT_FILE' done.
-	["BUILD_LAST"]=""	# late build script after copy 'RESULT_FILE' done.
+	["BUILD_POST"]=""	# post build script after make build before copy 'BUILD_OUTPUT' done.
+	["BUILD_LAST"]=""	# late build script after copy 'BUILD_OUTPUT' done.
 	["BUILD_CLEAN"]=" "	# clean script for clean command.
 )
 
@@ -54,14 +54,14 @@ function show_format () {
 	echo -e "\t\t MAKE_PATH       : < make build source path > ,"
 	echo -e "\t\t MAKE_CONFIG     : < make build default config(defconfig) > ,"
 	echo -e "\t\t MAKE_TARGET     : < make build targets, to support multiple targets, the separator is';' > ,"
-	echo -e "\t\t MAKE_NO_CLEAN : < if true do not support make clean commands > ,"
+	echo -e "\t\t MAKE_NOCLEAN : < if true do not support make clean commands > ,"
 	echo -e "\t\t MAKE_OPTION     : < make build option > ,"
-	echo -e "\t\t RESULT_FILE     : < make built images to copy resultdir, to support multiple file, the separator is';' > ,"
-	echo -e "\t\t RESULT_NAME     : < copy names to RESULT_DIR, to support multiple name, the separator is';' > ,"
+	echo -e "\t\t BUILD_OUTPUT     : < make built images to copy resultdir, to support multiple file, the separator is';' > ,"
+	echo -e "\t\t BUILD_RESULT     : < copy names to RESULT_DIR, to support multiple name, the separator is';' > ,"
 	echo -e "\t\t MAKE_JOBS       : < make build jobs number (-j n) > ,"
 	echo -e "\t\t BUILD_PREV      : < previous build before make build. > ,"
-	echo -e "\t\t BUILD_POST      : < post build after make build before copy 'RESULT_FILE' done. > ,"
-	echo -e "\t\t BUILD_LAST      : < last build after copy 'RESULT_FILE' done. > ,"
+	echo -e "\t\t BUILD_POST      : < post build after make build before copy 'BUILD_OUTPUT' done. > ,"
+	echo -e "\t\t BUILD_LAST      : < last build after copy 'BUILD_OUTPUT' done. > ,"
 	echo -e "\t\t BUILD_CLEAN     : < clean for clean command. > \","
 	echo -e ""
 }
@@ -128,7 +128,7 @@ __in_bsp_target_stage=""
 declare -A __bsp_stage=(
 	["prev"]=true		# execute script 'BUILD_PREV'
 	["make"]=true		# make with 'MAKE_PATH' and 'MAKE_TARGET'
-	["copy"]=true		# execute copy with 'RESULT_FILE and RESULT_NAME'
+	["copy"]=true		# execute copy with 'BUILD_OUTPUT and BUILD_RESULT'
 	["post"]=true		# execute script 'BUILD_POST'
 	["late"]=true		# execute script 'BUILD_LAST'
 )
@@ -523,7 +523,7 @@ function exec_make () {
 	return ${ret}
 }
 
-function run_script_prev () {
+function run_cmd_prev () {
 	local target=${1}
 
 	if [[ -z ${__bsp_target__["BUILD_PREV"]} ]] ||
@@ -537,7 +537,7 @@ function run_script_prev () {
 	fi
 }
 
-function run_script_post () {
+function run_cmd_post () {
 	local target=${1}
 
 	if [[ -z ${__bsp_target__["BUILD_POST"]} ]] ||
@@ -551,7 +551,7 @@ function run_script_post () {
 	fi
 }
 
-function run_script_late () {
+function run_cmd_late () {
 	local target=${1}
 
 	if [[ -z ${__bsp_target__["BUILD_LAST"]} ]] ||
@@ -565,7 +565,7 @@ function run_script_late () {
 	fi
 }
 
-function run_script_clean () {
+function run_cmd_clean () {
 	local target=${1} command=${__in_target_command}
 
 	[[ -z ${__bsp_target__["BUILD_CLEAN"]} ]] && return;
@@ -646,24 +646,24 @@ function run_make () {
 
 	# make clean
 	if [[ ${mode["clean"]} == true ]]; then
-		if [[ ${__bsp_target__["MAKE_NO_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_NOCLEAN"]} != true ]]; then
 			exec_make "-C ${path} clean" "${target}"
 		fi
 		if [[ ${command} == clean ]]; then
-			run_script_clean "${target}"
+			run_cmd_clean "${target}"
 			exit 0;
 		fi
 	fi
 
 	# make distclean
 	if [[ ${mode["distclean"]} == true ]]; then
-		if [[ ${__bsp_target__["MAKE_NO_CLEAN"]} != true ]]; then
+		if [[ ${__bsp_target__["MAKE_NOCLEAN"]} != true ]]; then
 			exec_make "-C ${path} distclean" "${target}"
 		fi
 		[[ ${command} == distclean ]] || [[ ${__in_target_cleanall} == true ]] && rm -f "$stage_file";
 		[[ ${__in_target_cleanall} == true ]] && return;
 		if [[ ${command} == distclean ]]; then
-			run_script_clean "${target}"
+			run_cmd_clean "${target}"
 			exit 0;
 		fi
 	fi
@@ -700,9 +700,9 @@ function run_make () {
 
 function run_result () {
 	local path=${__bsp_target__["MAKE_PATH"]}
-	local file=${__bsp_target__["RESULT_FILE"]}
+	local file=${__bsp_target__["BUILD_OUTPUT"]}
 	local dir=${__bsp_env__["RESULT_DIR"]}
-	local ret=${__bsp_target__["RESULT_NAME"]}
+	local ret=${__bsp_target__["BUILD_RESULT"]}
 
 	if [[ -z ${file} ]] || [[ ${__in_target_cleanall} == true ]] ||
 	   [[ ${__bsp_stage["copy"]} == false ]]; then
@@ -757,12 +757,12 @@ function build_target () {
 	if ! mkdir -p "${__bsp_log_dir}"; then exit 1; fi
 
 	setup_env "${__bsp_target__["CROSS_TOOL"]}"
-	run_script_prev "${target}"
+	run_cmd_prev "${target}"
 	run_make "${target}"
-	run_script_post "${target}"
+	run_cmd_post "${target}"
 	run_result "${target}"
-	run_script_late "${target}"
-	run_script_clean "${target}"
+	run_cmd_late "${target}"
+	run_cmd_clean "${target}"
 }
 
 function build_run () {
