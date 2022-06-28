@@ -456,18 +456,18 @@ function exec_shell () {
 
 		msg "\n LOG : ${log}"
 		msg "\n $> ${cmd}"
-		rm -f "$log"
+		rm -f "${log}"
 		[[ ${__in_verbose} == false ]] && run_progress;
 
-		if $fnc; then
+		if ${fnc}; then
 			if [[ ${__in_verbose} == false ]]; then
-				${cmd} >> "$log" 2>&1
+				${cmd} >> "${log}" 2>&1
 			else
 				${cmd}
 			fi
 		else
 			if [[ ${__in_verbose} == false ]]; then
-				bash -c "${cmd}" >> "$log" 2>&1
+				bash -c "${cmd}" >> "${log}" 2>&1
 			else
 				bash -c "${cmd}"
 			fi
@@ -479,7 +479,7 @@ function exec_shell () {
 		[[ ${__in_trace} == true ]] && set +x;
 		if [[ ${ret} -ne 0 ]]; then
 			if [[ ${__in_verbose} == false ]]; then
-				err " ERROR: script '${target}':$log\n";
+				err " ERROR: script '${target}':${log}\n";
 			else
 				err " ERROR: script '${target}'\n";
 			fi
@@ -498,11 +498,11 @@ function exec_make () {
 	command="$(echo "${command}" | sed 's/\s\s*/ /g')"
 	msg "\n LOG : ${log}"
 	msg "\n $> make ${command}"
-	rm -f "$log"
+	rm -f "${log}"
 
 	if [[ ${__in_verbose} == false ]] && [[ ${command} != *menuconfig* ]]; then
 		run_progress
-		make ${command} >> "$log" 2>&1
+		make ${command} >> "${log}" 2>&1
 	else
 		make ${command}
 	fi
@@ -512,7 +512,7 @@ function exec_make () {
 	kill_progress
 	if [[ ${ret} -eq 2 ]] && [[ ${command} != *"clean"* ]]; then
 		if [[ ${__in_verbose} == false ]]; then
-			err " ERROR: make '${target}':$log\n";
+			err " ERROR: make '${target}':${log}\n";
 		else
 			err " ERROR: make '${target}'\n";
 		fi
@@ -967,7 +967,7 @@ if [[ -z ${__in_bsp_config} ]]; then
         avail_list=()
 	parse_config
 	avail_configs avail_list
-	if [[ $* == *"menuconfig"* && ${__in_target_command} != "menuconfig" ]]; then
+	if [[ $* == "menuconfig"* && ${__in_target_command} != "menuconfig" ]]; then
 		menu_config "${avail_list}" "config" __in_bsp_config
 		menu_save
 		msg "$(sed -e 's/^/ /' < "${__bsp_config_info}")"
