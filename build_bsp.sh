@@ -441,7 +441,7 @@ function bsp_parse_target_list () {
 	fi
 }
 
-function bsp_exec_shell () {
+function bsp_do_shell () {
 	local command=${1} target=${2}
 	local log="${__bsp_log_dir}/${target}.script.log"
 	local ret
@@ -492,7 +492,7 @@ function bsp_exec_shell () {
 	return ${ret}
 }
 
-function bsp_exec_make () {
+function bsp_do_make () {
 	local command=${1} target=${2}
 	local log="${__bsp_log_dir}/${target}.make.log"
 	local ret
@@ -525,55 +525,24 @@ function bsp_exec_make () {
 	return ${ret}
 }
 
-function bsp_stage_prev () {
-	local target=${1}
+function bsp_stage_exec () {
+	local fn=${1} run=${2} target=${3}
 
-	if [[ -z ${__bsp_target['BUILD_PREV']} ]] ||
-	   [[ ${__a_target_cleanall} == true ]] ||
-	   [[ ${__bsp_stage["prev"]} == false ]]; then
+	if [[ -z ${fn} ]] || [[ ${run} == false ]] ||
+	   [[ ${__a_target_cleanall} == true ]]; then
 		return;
 	fi
 
-	if ! bsp_exec_shell "${__bsp_target['BUILD_PREV']}" "${target}"; then
-		exit 1;
-	fi
-}
-
-function bsp_stage_post () {
-	local target=${1}
-
-	if [[ -z ${__bsp_target['BUILD_POST']} ]] ||
-	   [[ ${__a_target_cleanall} == true ]] ||
-	   [[ ${__bsp_stage["post"]} == false ]]; then
-		return;
-	fi
-
-	if ! bsp_exec_shell "${__bsp_target['BUILD_POST']}" "${target}"; then
-		exit 1;
-	fi
-}
-
-function bsp_stage_late () {
-	local target=${1}
-
-	if [[ -z ${__bsp_target['BUILD_LAST']} ]] ||
-	   [[ ${__a_target_cleanall} == true ]] ||
-	   [[ ${__bsp_stage["late"]} == false ]]; then
-		return;
-	fi
-
-	if ! bsp_exec_shell "${__bsp_target['BUILD_LAST']}" "${target}"; then
+	if ! bsp_do_shell "${fn}" "${target}"; then
 		exit 1;
 	fi
 }
 
 function bsp_stage_clean () {
-	local target=${1}
-
 	[[ -z ${__bsp_target['BUILD_CLEAN']} ]] && return;
 	[[ ${__a_target_command} != *"clean"* ]] && return;
 
-	if ! bsp_exec_shell "${__bsp_target['BUILD_CLEAN']}" "${target}"; then
+	if ! bsp_do_shell "${__bsp_target['BUILD_CLEAN']}" "${1}"; then
 		exit 1;
 	fi
 }
@@ -637,7 +606,7 @@ function bsp_stage_make () {
 	# make clean
 	if [[ ${mode["clean"]} == true ]]; then
 		if [[ ${__bsp_target['MAKE_NOCLEAN']} != true ]]; then
-			bsp_exec_make "-C ${path} clean" "${target}"
+			bsp_do_make "-C ${path} clean" "${target}"
 		fi
 		if [[ ${command} == clean ]]; then
 			bsp_stage_clean "${target}"
@@ -648,7 +617,7 @@ function bsp_stage_make () {
 	# make distclean
 	if [[ ${mode["distclean"]} == true ]]; then
 		if [[ ${__bsp_target['MAKE_NOCLEAN']} != true ]]; then
-			bsp_exec_make "-C ${path} distclean" "${target}"
+			bsp_do_make "-C ${path} distclean" "${target}"
 		fi
 		[[ ${command} == distclean ]] || [[ ${__a_target_cleanall} == true ]] && rm -f "$stage_file";
 		[[ ${__a_target_cleanall} == true ]] && return;
@@ -660,7 +629,7 @@ function bsp_stage_make () {
 
 	# make defconfig
 	if [[ ${mode["defconfig"]} == true ]]; then
-		if ! bsp_exec_make "-C ${path} $opt_arch ${config}" "${target}"; then
+		if ! bsp_do_make "-C ${path} $opt_arch ${config}" "${target}"; then
 			exit 1;
 		fi
 		[[ ${command} == defconfig ]] && exit 0;
@@ -668,7 +637,7 @@ function bsp_stage_make () {
 
 	# make menuconfig
 	if [[ ${mode["menuconfig"]} == true ]]; then
-		bsp_exec_make "-C ${path} $opt_arch menuconfig" "${target}";
+		bsp_do_make "-C ${path} $opt_arch menuconfig" "${target}";
 		exit 0;
 	fi
 
@@ -677,12 +646,12 @@ function bsp_stage_make () {
 	   [[ ${command} == rebuild ]] || [[ ${command} == cleanbuild ]]; then
 		for i in ${__bsp_target['MAKE_TARGET']}; do
 			i="$(echo "${i}" | sed 's/[;,]//g') "
-			if ! bsp_exec_make "-C ${path} $opt_arch ${i} $opt_build" "${target}"; then
+			if ! bsp_do_make "-C ${path} $opt_arch ${i} $opt_build" "${target}"; then
 				exit 1
 			fi
 		done
 	else
-		if ! bsp_exec_make "-C ${path} $opt_arch ${command} $opt_build" "${target}"; then
+		if ! bsp_do_make "-C ${path} $opt_arch ${command} $opt_build" "${target}"; then
 			exit 1
 		fi
 	fi
@@ -699,13 +668,13 @@ function bsp_stage_result () {
 		return;
 	fi
 
-	if ! mkdir -p "$dir"; then exit 1; fi
+	if ! mkdir -p "${dir}"; then exit 1; fi
 
 	ret=$(echo "${ret}" | sed 's/[;,]//g')
 	for src in ${file}; do
 		src=$(realpath "${path}/${src}")
 		src=$(echo "${src}" | sed 's/[;,]//g')
-		dst=$(realpath "$dir/$(echo "${ret}" | cut -d' ' -f1)")
+		dst=$(realpath "${dir}/$(echo "${ret}" | cut -d' ' -f1)")
 		ret=$(echo ${ret} | cut -d' ' -f2-)
 		if [[ ${src} != *'*'* ]] && [[ -d ${src} ]] && [[ -d ${dst} ]]; then
 			rm -rf "${dst}";
@@ -746,13 +715,14 @@ function bsp_build_target () {
 	if ! mkdir -p "${__bsp_env['RESULT_DIR']}"; then exit 1; fi
 	if ! mkdir -p "${__bsp_log_dir}"; then exit 1; fi
 
-	bsp_setup_env "${__bsp_target['CROSS_TOOL']}"
-	bsp_stage_prev "${target}"
-	bsp_stage_make "${target}"
-	bsp_stage_post "${target}"
+	bsp_setup_env    "${__bsp_target['CROSS_TOOL']}"
+	bsp_stage_exec   "${__bsp_target['BUILD_PREV']}" "${__bsp_stage['prev']}" "${target}"
+	bsp_stage_make   "${target}"
+	bsp_stage_exec   "${__bsp_target['BUILD_POST']}" "${__bsp_stage['post']}" "${target}"
 	bsp_stage_result "${target}"
-	bsp_stage_late "${target}"
-	bsp_stage_clean "${target}"
+	bsp_stage_exec   "${__bsp_target['BUILD_LAST']}" "${__bsp_stage['late']}" "${target}"
+
+	bsp_stage_clean  "${target}"
 }
 
 function bsp_build_run () {
