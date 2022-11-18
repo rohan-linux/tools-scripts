@@ -3,17 +3,20 @@
 # Author: Junghyun, Kim <jhkim@nexell.co.kr>
 #
 
+# debug
+# set -ex
+
 eval "$(locale | sed -e 's/\(.*\)=.*/export \1=en_US.UTF-8/')"
 
 BSP_EDITOR='vim'	# editor with '-e' option
 
-# config script's environment elements
+# script's environment elements
 declare -A __bsp_env=(
 	['CROSS_TOOL']=" "
 	['RESULT_DIR']=" "
 )
 
-# config script's target elements
+# script's target elements
 declare -A __bsp_target=(
 	['BUILD_DEPEND']=" "	# target dependency, to support multiple targets, the separator is' '.
 	['BUILD_MANUAL']=" "	# manual build, It true, does not support automatic build and must be built manually.
@@ -42,9 +45,9 @@ declare -A __bsp_stage=(
 )
 
 __bsp_script_dir="$(dirname "$(realpath "$0")")"
-__bsp_config_info="${__bsp_script_dir}/.bsp_config"
-__bsp_config_prefix='build.'
-__bsp_config_extend='sh'
+__bsp_script_info="${__bsp_script_dir}/.bsp_script"
+__bsp_script_prefix='build.'
+__bsp_script_extend='.sh'
 __bsp_log_dir='.log'	# save to result directory
 __bsp_image=()	# store ${BUILD_IMAGES}
 __bsp_progress_pid=''
@@ -82,24 +85,24 @@ function bsp_usage () {
 	if [[ ${1} == format ]]; then bsp_usage_format; exit 0; fi
 
 	echo " Usage:"
-	echo -e "\t$(basename "$0") -f <config> [options]"
+	echo -e "\t$(basename "$0") -f <script> [options]"
 	echo ""
 	echo " options:"
-	echo -ne "\t menuconfig\t Select the config with"
-	echo -ne " the prefix '${__bsp_config_prefix}' and extend '.${__bsp_config_extend}'"
-	echo -e  " in the configs directory."
+	echo -ne "\t menuconfig\t Select the build script with"
+	echo -ne " the prefix '${__bsp_script_prefix}' and extend '.${__bsp_script_extend}'"
+	echo -e  " in the build scripts directory."
 	echo -e  "\t\t\t menuconfig is depended '-D' path"
-	echo -e  "\t-D [dir]\t set configs directory for the menuconfig"
-	echo -e  "\t-S [config]\t set build config file\n"
+	echo -e  "\t-D [dir]\t set build scripts directory for the menuconfig"
+	echo -e  "\t-S [script]\t set build script file\n"
 	echo -e  "\t-t [target]\t set build targets, '<TARGET>' ..."
 	echo -e  "\t-c [command]\t run command"
 	echo -e  "\t\t\t support 'cleanbuild','rebuild' and commands supported by target"
 	echo -e  "\t-C\t\t clean all targets, this option run make clean/distclean and 'BUILD_CLEAN'"
-	echo -e  "\t-i\t\t show target config info"
+	echo -e  "\t-i\t\t show target build script info"
 	echo -e  "\t-l\t\t listup targets"
 	echo -e  "\t-j [jops]\t set build jobs"
 	echo -e  "\t-o [option]\t set build options"
-	echo -e  "\t-e\t\t edit build config file"
+	echo -e  "\t-e\t\t edit build build script file"
 	echo -e  "\t-v\t\t show build log"
 	echo -e  "\t-V\t\t show build log and enable external shell tasks tracing (with 'set -x')"
 	echo -e  "\t-p\t\t skip dependency"
@@ -114,9 +117,9 @@ function bsp_usage () {
 	echo ""
 }
 
-__a_bsp_config=''	# build script file
+__a_bsp_script=''	# build script file
 __a_bsp_target=()
-__a_config_dir="${__bsp_script_dir}/configs"
+__a_script_dir="${__bsp_script_dir}/scripts"
 __a_target_command=''
 __a_target_cleanall=false
 __a_append_option=''
@@ -171,8 +174,8 @@ function bsp_kill_progress () {
 trap bsp_kill_progress EXIT
 
 function bsp_print_env () {
-	echo -e "\n\033[1;32m BUILD STATUS       = ${__bsp_config_info}\033[0m";
-	echo -e "\033[1;32m BUILD CONFIG       = ${__a_bsp_config}\033[0m";
+	echo -e "\n\033[1;32m BUILD STATUS       = ${__bsp_script_info}\033[0m";
+	echo -e "\033[1;32m BUILD CONFIG       = ${__a_bsp_script}\033[0m";
 	echo ""
 	for key in "${!__bsp_env[@]}"; do
 		[[ -z ${__bsp_env[${key}]} ]] && continue;
@@ -422,7 +425,7 @@ function bsp_parse_target_list () {
 	fi
 
 	if [[ ${__a_show_list} == true ]]; then
-		echo -e "\033[1;32m BUILD CONFIG  = ${__a_bsp_config}\033[0m";
+		echo -e "\033[1;32m BUILD CONFIG  = ${__a_bsp_script}\033[0m";
 		echo -e "\033[0;33m TARGETS\033[0m";
 		for i in "${dump_targets[@]}"; do
 			echo -e "\033[0;33m  ${i}\033[0m";
@@ -766,15 +769,15 @@ function bsp_build_run () {
 	bsp_build_time
 }
 
-function bsp_setup_config () {
-	local config=${1}
+function bsp_setup_script () {
+	local script=${1}
 
-	if [[ ! -f ${config} ]]; then
-		logexit " Not selected build scripts in ${config}"
+	if [[ ! -f ${script} ]]; then
+		logexit " Not selected build scripts in ${script}"
 	fi
 
 	# include build script file
-	source "${config}"
+	source "${script}"
 	if [[ -z ${BUILD_IMAGES} ]]; then
 		logerr " Not defined 'BUILD_IMAGES'\n"
 		bsp_usage_format
@@ -784,12 +787,12 @@ function bsp_setup_config () {
 	__bsp_image=("${BUILD_IMAGES[@]}");
 }
 
-function bsp_save_config () {
+function bsp_save_script () {
 	local path=${1} script=${2}
 
-	if [[ ! -f $(realpath "${__bsp_config_info}") ]]; then
-cat > "${__bsp_config_info}" <<EOF
-PATH   = $(realpath "${__a_config_dir}")
+	if [[ ! -f $(realpath "${__bsp_script_info}") ]]; then
+cat > "${__bsp_script_info}" <<EOF
+PATH   = $(realpath "${__a_script_dir}")
 CONFIG =
 EOF
 	fi
@@ -798,23 +801,21 @@ EOF
 		if [[ ! -d $(realpath "${path}") ]]; then
 			logexit " No such directory: ${path}"
 		fi
-		sed -i "s|^PATH.*|PATH = ${path}|" "${__bsp_config_info}"
-                __a_config_dir=${path}
+		sed -i "s|^PATH.*|PATH = ${path}|" "${__bsp_script_info}"
+                __a_script_dir=${path}
 	fi
 
 	if [[ -n ${script} ]]; then
-		if [[ ! -f $(realpath "${__a_config_dir}/${script}") ]]; then
+		if [[ ! -f $(realpath "${__a_script_dir}/${script}") ]]; then
 			logexit " No such script: ${path}"
 		fi
-		sed -i "s/^CONFIG.*/CONFIG = ${script}/" "${__bsp_config_info}"
+		sed -i "s/^CONFIG.*/CONFIG = ${script}/" "${__bsp_script_info}"
 	fi
 }
 
-function bsp_parse_config () {
+function bsp_parse_script () {
 	local table=${1}	# parse table
-	local file=${__bsp_config_info}
-	local prefix=${__bsp_config_prefix} extend=${__bsp_config_extend}
-        local path=${__a_config_dir}
+	local file=${__bsp_script_info}
 	local val ret
 
 	[[ ! -f ${file} ]] && return;
@@ -822,28 +823,28 @@ function bsp_parse_config () {
 	val=$(sed -n '/^\<PATH\>/p' "${file}");
 	ret=$(echo "${val}" | cut -d'=' -f 2)
 	ret=$(echo "${ret}" | sed 's/[[:space:]]//g')
-	__a_config_dir="${ret# *}"
+	__a_script_dir="${ret# *}"
 
 	val=$(sed -n '/^\<CONFIG\>/p' "${file}");
 	ret=$(echo "${val}" | cut -d'=' -f 2)
 	ret=$(echo "${ret}" | sed 's/[[:space:]]//g')
-	__a_bsp_config="$(realpath "${__a_config_dir}/"${ret# *}"")"
+	__a_bsp_script="$(realpath "${__a_script_dir}/"${ret# *}"")"
 
-	ret=$(find ${path} -print \
-		2> >(grep -v 'No such file or directory' >&2) | \
-		grep -F "${prefix}" | sort)
+	val=''
+	ret=$(find ${__a_script_dir} -print \
+		2> >(grep 'No such file or directory' >&2) | \
+		grep "${__bsp_script_prefix}*${__bsp_script_extend}" | sort)
 	for i in ${ret}; do
                 i="$(echo "$(basename ${i})" | cut -d'/' -f2)"
-		[[ -n $(echo "${i}" | awk -F".${prefix}" '{print $2}') ]] && continue;
-		[[ ${i} == *common* ]] && continue;
-		[[ "${i##*.}" != ${extend} ]] && continue;
-		val="${val} $(echo "${i}" | awk -F".${prefix}" '{print $1}')"
+		#[[ -n $(echo "${i}" | awk -F".${__bsp_script_prefix}" '{print $2}') ]] && continue;
+		#[[ ${i} == *common* ]] && continue;
+		val="${val} $(echo ${i})"
 		eval "${table}=(\"${val}\")"
 	done
 }
 
-function bsp_menu_config () {
-	local table=${1} string=${2} result=${3} # return value
+function bsp_menu_script () {
+	local table=${1}
 	local select
 	local -a entry
 
@@ -851,7 +852,7 @@ function bsp_menu_config () {
 		stat="OFF"
 		entry+=( "${i}" )
 		entry+=( " " )
-		[[ ${i} == "$(basename "${!result}")" ]] && stat="ON";
+		[[ ${i} == "$(basename "${__a_bsp_script}")" ]] && stat="ON";
 		entry+=( "${stat}" )
 	done
 
@@ -859,22 +860,21 @@ function bsp_menu_config () {
 		logexit " Please install the whiptail"
 	fi
 
-	select=$(whiptail --title "Target ${string}" \
-		--radiolist "Choose a ${string}" 0 50 ${#entry[@]} -- "${entry[@]}" \
+	select=$(whiptail --title "Target script" \
+		--radiolist "Choose a script" 0 50 ${#entry[@]} -- "${entry[@]}" \
 		3>&1 1>&2 2>&3)
 	[[ -z ${select} ]] && exit 1;
-
-	eval "${result}=(\"${select}\")"
+	__a_bsp_script=${select}
 }
 
 function bsp_menu_save () {
 	if ! (whiptail --title "Save/Exit" --yesno "Save" 8 78); then
 		exit 1;
 	fi
-	bsp_save_config "" "${__a_bsp_config}"
+	bsp_save_script "" "${__a_bsp_script}"
 }
 
-function bsp_cmd_set_stage () {
+function bsp_set_stage () {
 	for i in "${!__bsp_stage[@]}"; do
 		if [[ ${i} == "${1}" ]]; then
 			for n in "${!__bsp_stage[@]}"; do
@@ -896,7 +896,7 @@ function bsp_cmd_set_stage () {
 function bsp_parse_args () {
 	while getopts "f:t:c:Cj:o:s:D:S:mAilevVph" opt; do
 	case ${opt} in
-		f )	__a_bsp_config=$(realpath "${OPTARG}");;
+		f )	__a_bsp_script=$(realpath "${OPTARG}");;
 		t )	__a_bsp_target=("${OPTARG}")
 			until [[ $(eval "echo \${$OPTIND}") =~ ^-.* ]] || [[ -z "$(eval "echo \${$OPTIND}")" ]]; do
 				__a_bsp_target+=("$(eval "echo \${$OPTIND}")")
@@ -912,18 +912,18 @@ function bsp_parse_args () {
 		V )	__a_verbose=true; __a_trace=true;;
 		p )	__a_check_depend=false;;
 		o )	__a_append_option="${OPTARG}";;
-		D )	__a_config_dir=$(realpath "${OPTARG}")
-			bsp_save_config "${__a_config_dir}" ""
+		D )	__a_script_dir=$(realpath "${OPTARG}")
+			bsp_save_script "${__a_script_dir}" ""
 			exit 0;;
-		S)      __a_config_dir=$(dirname "$(realpath "${OPTARG}")")
-                        __a_bsp_config=$(basename "$(realpath "${OPTARG}")")
-                        bsp_save_config "${__a_config_dir}" "${__a_bsp_config}"
+		S)      __a_script_dir=$(dirname "$(realpath "${OPTARG}")")
+                        __a_bsp_script=$(basename "$(realpath "${OPTARG}")")
+                        bsp_save_script "${__a_script_dir}" "${__a_bsp_script}"
 			exit 0;;
 		i ) 	__a_show_info=true;;
 		l )	__a_show_list=true;;
 		e )	__a_edit=true;
 			break;;
-		s ) 	bsp_cmd_set_stage "${OPTARG}";;
+		s ) 	bsp_set_stage "${OPTARG}";;
 		h )	bsp_usage "${@: 2}";
 			exit 1;;
 	        * )	exit 1;;
@@ -940,26 +940,27 @@ else
 	bsp_parse_args "${@}"
 fi
 
-if [[ -z ${__a_bsp_config} ]]; then
+if [[ -z ${__a_bsp_script} ]]; then
         avail_list=()
-	bsp_parse_config avail_list
+	bsp_parse_script avail_list
 	if [[ $* == "menuconfig"* && ${__a_target_command} != "menuconfig" ]]; then
-		bsp_menu_config "${avail_list}" "config" __a_bsp_config
+		bsp_menu_script "${avail_list}"
 		bsp_menu_save
-		logmsg "$(sed -e 's/^/ /' < "${__bsp_config_info}")"
+		echo -e "\033[1;32m SAVE : ${__bsp_script_info}\n\033[0m";
+		logmsg "$(sed -e 's/^/ /' < "${__bsp_script_info}")"
 		exit 0;
 	fi
-	if [[ -z ${__a_bsp_config} ]]; then
-		logerr " Not selected build script in ${__a_config_dir}"
+	if [[ -z ${__a_bsp_script} ]]; then
+		logerr " Not selected build script in ${__a_script_dir}"
 		logerr " Set build script with -f <script> or menuconfig option"
 		exit 1;
 	fi
 fi
 
-bsp_setup_config "${__a_bsp_config}"
+bsp_setup_script "${__a_bsp_script}"
 
 if [[ "${__a_edit}" == true ]]; then
-	${BSP_EDITOR} "${__a_bsp_config}"
+	${BSP_EDITOR} "${__a_bsp_script}"
 	exit 0;
 fi
 
