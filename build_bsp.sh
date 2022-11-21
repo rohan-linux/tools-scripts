@@ -333,7 +333,7 @@ function bsp_parse_target () {
 		__bsp_target['BUILD_JOBS']=${__a_build_jobs};
 }
 
-function bsp_check_depend () {
+function bsp_setup_depend () {
         local target=${1}
 
 	bsp_parse_depend "${target}"
@@ -350,7 +350,7 @@ function bsp_check_depend () {
 			exit 1;
 		fi
 		__bsp_depend_list+=("${d}")
-		bsp_check_depend "${d}"
+		bsp_setup_depend "${d}"
         done
 	unset __bsp_depend_list[${#__bsp_depend_list[@]}-1]
 }
@@ -420,7 +420,7 @@ function bsp_parse_target_list () {
 	if [[ ${__a_build_depend} == true ]]; then
 		for i in "${__a_build_target[@]}"; do
 			__bsp_depend_list+=("${i}")
-			bsp_check_depend "${i}"
+			bsp_setup_depend "${i}"
 		done
 	fi
 
