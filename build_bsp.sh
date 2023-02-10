@@ -25,6 +25,7 @@ declare -A __bsp_target=(
 	['MAKE_DEFCONFIG']=""	# make default config(defconfig)
 	['MAKE_CONFIG']=""	# make config options, TODO
 	['MAKE_TARGET']=""	# make build targets, to support multiple targets, the separator is ';'
+	['MAKE_CLEANOPT']=""	# make clean option
 	['MAKE_NOCLEAN']=""	# if true do not support make clean commands
 	['MAKE_OUTDIR']=""	# make locate all output files in 'dir'
 	['MAKE_OPTION']=""	# make build option
@@ -76,11 +77,12 @@ function fn_usage_format () {
 	echo -e "\t\t MAKE_CONFIG      : < make config options, TODO > ,"
 	echo -e "\t\t MAKE_TARGET      : < make build targets, to support multiple targets, the separator is ';' > ,"
 	echo -e "\t\t MAKE_OUTDIR      : < make locate all output files in 'dir' >,"
+	echo -e "\t\t MAKE_CLEANOPT    : < make clean option > ,"
 	echo -e "\t\t MAKE_NOCLEAN     : < if true do not support make clean commands > ,"
 	echo -e "\t\t MAKE_OPTION      : < make build option > ,"
 	echo -e "\t\t MAKE_INSTALL     : < make install option > ,"
 	echo -e "\t\t BUILD_OUTPUT     : < built output images(relative path of MAKE_PATH), to support multiple file, the separator is ';' > ,"
-	echo -e "\t\t BUILD_RESULT    : < images names to copy to 'RESULT_DIR', to support multiple name, the separator is ';' > ,"
+	echo -e "\t\t BUILD_RESULT     : < images names to copy to 'RESULT_DIR', to support multiple name, the separator is ';' > ,"
 	echo -e "\t\t BUILD_PREP       : < previous build before make build. > ,"
 	echo -e "\t\t BUILD_POST       : < post build after make build before 'BUILD_OUTPUT' done. > ,"
 	echo -e "\t\t BUILD_COMPLETE   : < build complete after 'BUILD_OUTPUT' done. > ,"
@@ -469,10 +471,13 @@ function fn_shell () {
 		[[ ${__a_build_verbose} == false ]] && fn_run_progress;
 
 		if ${fnc}; then
+			# get 2d input arguments in function
+			# function FUNC()
+			#	declare -n local var="${1}"
 			if [[ ${__a_build_verbose} == false ]]; then
-				${cmd} >> "${log}" 2>&1
+				${cmd} __bsp_target >> "${log}" 2>&1
 			else
-				${cmd}
+				${cmd} __bsp_target
 			fi
 		else
 			if [[ ${__a_build_verbose} == false ]]; then
@@ -564,6 +569,9 @@ function fn_do_make () {
 		path=${__bsp_target['MAKE_OUTDIR']}
 
 	[[ ${cmd} == ${conf} && -f "${path}/.config" ]] && return;
+
+	[[ ${cmd} == *"clean"* && -n ${__bsp_target['MAKE_CLEANOPT']} ]] &&
+		argv+=( ${__bsp_target['MAKE_CLEANOPT']} )
 
 	argv+=( "${__a_build_option}" "${cmd}" "-j${__bsp_target['BUILD_JOBS']}" )
 	if ! fn_make "$( echo "${argv[@]}" )" "${target}"; then
@@ -673,7 +681,9 @@ function fn_build_target () {
 			fn_do_make "distclean" "${target}"
 			fn_do_make "${__bsp_task['defconfig']}" "${target}"
 		else
-			fn_do_make "${__a_build_cmd}" "${target}";
+			if [[ ${__bsp_target['MAKE_NOCLEAN']} != true ]]; then
+				fn_do_make "${__a_build_cmd}" "${target}";
+			fi
 		fi
 		if [[ ${__a_build_cmd} == *"clean"* ]]; then
 			fn_do_exec "${__bsp_task['clean']}" "${target}"
