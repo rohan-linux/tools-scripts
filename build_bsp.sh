@@ -17,26 +17,27 @@ declare -A __bsp_env=(
 
 # script's target elements
 declare -A __bsp_target=(
-	['BUILD_DEPEND']=" "	# target dependency, to support multiple targets, the separator is ' '.
-	['BUILD_MANUAL']=" "	# manual build, It true, does not support automatic build and must be built manually.
-	['CROSS_TOOL']=" "	# make build crosstool compiler path (set CROSS_COMPILE=)
-	['MAKE_ARCH']=" "	# make build architecture (set ARCH=) ex> arm, arm64
-	['MAKE_PATH']=" "	# make build source path
-	['MAKE_DEFCONFIG']=""	# make default config(defconfig)
-	['MAKE_CONFIG']=""	# make config options, TODO
-	['MAKE_TARGET']=""	# make build targets, to support multiple targets, the separator is ';'
+	['BUILD_DEPEND']=" "    # target dependency, to support multiple targets, the separator is ' '.
+	['BUILD_MANUAL']=" "    # manual build, It true, does not support automatic build and must be built manually.
+	['CROSS_TOOL']=" "      # make build crosstool compiler path (set CROSS_COMPILE=)
+	['MAKE_ARCH']=" "       # make build architecture (set ARCH=) ex> arm, arm64
+	['MAKE_PATH']=" "       # make build source path
+	['MAKE_DEFCONFIG']=""   # make default config(defconfig)
+	['MAKE_CONFIG']=""      # make config options, TODO
+	['MAKE_TARGET']=""      # make build targets, to support multiple targets, the separator is ';'
 	['MAKE_CLEANOPT']=""	# make clean option
-	['MAKE_NOCLEAN']=""	# if true do not support make clean commands
-	['MAKE_OUTDIR']=""	# make locate all output files in 'dir'
-	['MAKE_OPTION']=""	# make build option
-	['MAKE_INSTALL']=""	# make install options
-	['BUILD_OUTPUT']=""	# built output images(relative path of MAKE_PATH), to support multiple targets, the separator is ';'
-	['BUILD_RESULT']=""	# images names to copy to 'RESULT_DIR', to support multiple targets, the separator is ';'
-	['BUILD_PREP']=" "	# previous build script before make build.
-	['BUILD_POST']=""	# post build script after make build before 'BUILD_OUTPUT' done.
-	['BUILD_COMPLETE']=""	# build complete script after 'BUILD_OUTPUT' done.
-	['BUILD_CLEAN']=" "	# clean script for clean command.
-	['BUILD_JOBS']=" "	# make build jobs number (-j n)
+	['MAKE_NOCLEAN']=""     # if true do not support make clean commands
+	['MAKE_OUTDIR']=""      # make locate all output files in 'dir'
+	['MAKE_OPTION']=""      # make build option
+	['MAKE_INSTALL']=""     # make install options
+	['BUILD_PATH']=""       # build source path, The source in this path does not make a build.'
+	['BUILD_OUTPUT']=""     # built output images(relative path of MAKE_PATH), to support multiple targets, the separator is ';'
+	['BUILD_RESULT']=""     # images names to copy to 'RESULT_DIR', to support multiple targets, the separator is ';'
+	['BUILD_PREP']=""       # previous build script before make build.
+	['BUILD_POST']=""       # post build script after make build before 'BUILD_OUTPUT' done.
+	['BUILD_COMPLETE']=""   # build complete script after 'BUILD_OUTPUT' done.
+	['BUILD_CLEAN']=""      # clean script for clean command.
+	['BUILD_JOBS']=""       # make build jobs number (-j n)
 )
 
 declare -A __bsp_task=(
@@ -78,9 +79,10 @@ function fn_usage_format () {
 	echo -e "\t\t MAKE_TARGET      : < make build targets, to support multiple targets, the separator is ';' > ,"
 	echo -e "\t\t MAKE_OUTDIR      : < make locate all output files in 'dir' >,"
 	echo -e "\t\t MAKE_CLEANOPT    : < make clean option > ,"
-	echo -e "\t\t MAKE_NOCLEAN     : < if true do not support make clean commands > ,"
+	echo -e "\t\t MAKE_NOCLEAN     : < if true do not support make clean commands >,"
 	echo -e "\t\t MAKE_OPTION      : < make build option > ,"
 	echo -e "\t\t MAKE_INSTALL     : < make install option > ,"
+	echo -e "\t\t BUILD_PATH       : < build source path, The source in this path does not make a build >,"
 	echo -e "\t\t BUILD_OUTPUT     : < built output images(relative path of MAKE_PATH), to support multiple file, the separator is ';' > ,"
 	echo -e "\t\t BUILD_RESULT     : < images names to copy to 'RESULT_DIR', to support multiple name, the separator is ';' > ,"
 	echo -e "\t\t BUILD_PREP       : < previous build before make build. > ,"
@@ -462,7 +464,7 @@ function fn_shell () {
 		cmd="$(echo "${cmd}" | sed 's/\s\s*/ /g')"
 		cmd="$(echo "${cmd}" | sed 's/^[ \t]*//;s/[ \t]*$//')"
 		cmd="$(echo "${cmd}" | sed 's/\s\s*/ /g')"
-		fnc=$($(echo ${cmd}| cut -d' ' -f1) 2>/dev/null | grep -q 'function')
+		fnc="$(type -t "${cmd}")"
 		unset IFS
 
 		logmsg "\n LOG : ${log}"
@@ -470,7 +472,7 @@ function fn_shell () {
 		rm -f "${log}"
 		[[ ${__a_build_verbose} == false ]] && fn_run_progress;
 
-		if ${fnc}; then
+		if [[ "${fnc}" == "function" ]]; then
 			# get 2d input arguments in function
 			# function FUNC()
 			#	declare -n local var="${1}"
@@ -544,6 +546,7 @@ function fn_do_exec () {
 }
 
 function fn_do_conf () {
+	logmsg " *** TODO Implementation ***"
 	return
 }
 
