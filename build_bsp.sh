@@ -846,18 +846,18 @@ function fn_parse_args () {
 		D )	__a_script_path=$(realpath "${OPTARG}")
 			fn_save_script "${__a_script_path}" ""
 			exit 0;;
-		S)      __a_script_path=$(dirname "$(realpath "${OPTARG}")")
-                        __a_build_script=$(basename "$(realpath "${OPTARG}")")
-                        fn_save_script "${__a_script_path}" "${__a_build_script}"
+		S )	__a_script_path=$(dirname "$(realpath "${OPTARG}")")
+			__a_build_script=$(basename "$(realpath "${OPTARG}")")
+			fn_save_script "${__a_script_path}" "${__a_build_script}"
 			exit 0;;
-		i ) 	__a_target_info=true;;
+		i )	__a_target_info=true;;
 		l )	__a_target_list=true;;
 		e )	__a_edit=true;
 			break;;
-		s ) 	__a_build_task="${OPTARG}";;
+		s )	__a_build_task="${OPTARG}";;
 		h )	fn_usage "$(eval "echo \${$OPTIND}")";
 			exit 1;;
-	        * )	exit 1;;
+		* )	exit 1;;
 	esac
 	done
 }
@@ -872,7 +872,7 @@ else
 fi
 
 if [[ -z ${__a_build_script} ]]; then
-        avail_list=()
+	avail_list=()
 	fn_parse_script avail_list
 	if [[ $* == "menuconfig"* && ${__a_build_cmd} != "menuconfig" ]]; then
 		fn_menu_script "${avail_list}"
