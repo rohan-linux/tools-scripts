@@ -30,7 +30,6 @@ declare -A __bsp_target=(
 	['MAKE_OUTDIR']=""      # make locate all output files in 'dir'
 	['MAKE_OPTION']=""      # make build option
 	['MAKE_INSTALL']=""     # make install options
-	['BUILD_PATH']=""       # build source path, The source in this path does not make a build.'
 	['BUILD_OUTPUT']=""     # built output images(relative path of MAKE_PATH), to support multiple targets, the separator is ';'
 	['BUILD_RESULT']=""     # images names to copy to 'RESULT_DIR', to support multiple targets, the separator is ';'
 	['BUILD_PREP']=""       # previous build script before make build.
@@ -82,7 +81,6 @@ function fn_usage_format () {
 	echo -e "\t\t MAKE_NOCLEAN     : < if true do not support make clean commands >,"
 	echo -e "\t\t MAKE_OPTION      : < make build option > ,"
 	echo -e "\t\t MAKE_INSTALL     : < make install option > ,"
-	echo -e "\t\t BUILD_PATH       : < build source path, The source in this path does not make a build >,"
 	echo -e "\t\t BUILD_OUTPUT     : < built output images(relative path of MAKE_PATH), to support multiple file, the separator is ';' > ,"
 	echo -e "\t\t BUILD_RESULT     : < images names to copy to 'RESULT_DIR', to support multiple name, the separator is ';' > ,"
 	echo -e "\t\t BUILD_PREP       : < previous build before make build. > ,"
