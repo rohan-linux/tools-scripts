@@ -590,7 +590,7 @@ function bs_usage () {
 	echo -e  "\t-c [command]\t build commands supported by target."
 	echo -e  "\t-o [option]\t add option to build or config."
 	echo -e  "\t-j [jobs]\t set build jobs"
-	echo -e  "\t-l\t\t show build script's lists"
+	echo -e  "\t-l\t\t show build targets in scripts"
 	echo -e  "\t-e\t\t edit build script : ${BS_SCRIPT}"
 	echo -e  "\t-v\t\t build verbose"
 	echo ""
@@ -599,7 +599,7 @@ function bs_usage () {
 	local -a op_lists=( ${BS_OP_LISTS[*]} )
 	for i in "${op_lists[@]}"; do
 		declare -n t=${i}
-		echo -ne "\033[0;33m* ${t['name']}\t| \033[0m";
+		echo -ne "\033[0;33m* ${t['type']}\t| \033[0m";
 		for n in "${!t[@]}"; do
 			[[ ${n} == "type" ]] && continue;
 			[[ ${n} == "name" ]] && continue;
@@ -607,7 +607,7 @@ function bs_usage () {
 			[[ ${n} == "command" ]] && continue;
 			echo -ne "\033[0;33m${n} \033[0m";
 		done
-		echo -ne "\033[0;33m'target commands' \033[0m";
+		echo -ne "\033[0;33m'misc command' \033[0m";
 		echo ""
 	done
 }
@@ -706,6 +706,7 @@ function bs_build_run() {
 					logext " Error! Set verbose(-v) to print error log !"
 				fi
 				status="done"
+				echo ""
 			done
 		fi
 
@@ -726,6 +727,9 @@ if [[ -z ${BS_SCRIPT} ]]; then
 fi
 
 source ${BS_SCRIPT}
-
+if [[ -z ${BS_TARGETS} ]]; then
+	logerr " None BS_TARGETS : ${BS_SCRIPT} !!!"
+	exit 1;
+fi
 bs_build_args "${@}"
 bs_build_run
