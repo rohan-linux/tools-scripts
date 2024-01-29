@@ -20,7 +20,8 @@
 
 eval "$(locale | sed -e 's/\(.*\)=.*/export \1=en_US.UTF-8/')"
 
-BSP_DIR="$(realpath $(dirname $(realpath "$BASH_SOURCE"))/../..)"
+BSP_DIR="$(realpath $(dirname $(realpath "${BASH_SOURCE}"))/../..)"
+BS_SHELL_DIR="$(dirname $(realpath ${BASH_SOURCE}))"
 export BSP_DIR=${BSP_DIR}
 
 function logerr () { echo -e "\033[1;31m$*\033[0m"; }
@@ -30,9 +31,8 @@ function logext () { echo -e "\033[1;31m$*\033[0m"; exit -1; }
 ###############################################################################
 # Set Build Script
 ###############################################################################
-
-BS_SCRIPT_DIR="${BSP_DIR}/tools/project"
-BS_SCRIPT_CFG="${BSP_DIR}/.bs_config"
+BS_SCRIPT_DIR="$(realpath "${BS_SHELL_DIR}/../project")"
+BS_SCRIPT_CFG="${BS_SCRIPT_DIR}/.bs_config"
 BS_SCRIPT_EXTEN='*.bs'
 BS_SCRIPT=""
 BS_EDITOR='vim'	# editor with '-e' option
@@ -88,6 +88,7 @@ _BUILD_IMAGE=""
 _BUILD_VERBOSE=false
 _BUILD_OPTION=""
 _BUILD_COMMAND=""
+_BUILD_SCRIPT=""
 _BUILD_JOBS="-j$(grep -c processor /proc/cpuinfo)"
 
 function bs_prog_start () {
@@ -488,9 +489,6 @@ function bs_script_get () {
 		return -1;
 	fi
 
-	logmsg " Config\t: ${BS_SCRIPT_CFG}"
-	logmsg " Script\t: ${BS_SCRIPT}\n"
-
 	return 0;
 }
 
@@ -499,16 +497,17 @@ function bs_script_set () {
 
 	if [[ -z ${script}  || ! -f ${script} ]]; then
 		logerr " Invalid script : ${script}"
-		return;
+		return -1;
 	fi
 
 	script=$(realpath ${script})
-	logmsg " SAVE\t : '${script}' [${BS_SCRIPT_CFG}]"
+	logmsg " UPDATE\t: ${script} [${BS_SCRIPT_CFG}]"
 
 	# save script config
 cat > "${BS_SCRIPT_CFG}" <<EOF
 CONFIG = ${script}
 EOF
+	return 0;
 }
 
 function bs_menuconfig () {
@@ -555,12 +554,7 @@ function bs_menuconfig () {
 	bs_script_set "${BS_SCRIPT}"
 }
 
-function bs_script_show () {
-	if [[ -z ${BS_TARGETS} ]]; then
-		logerr " Not defined targets : BS_TARGETS in ${BS_SCRIPT} !!!"
-		exit 1;
-	fi
-
+function bs_script_info () {
 	for t in "${BS_TARGETS[@]}"; do
 		bs_op_assign ${t}
 
@@ -590,7 +584,7 @@ function bs_usage () {
 	echo -e  "\t-c [command]\t build commands supported by target."
 	echo -e  "\t-o [option]\t add option to build or config."
 	echo -e  "\t-j [jobs]\t set build jobs"
-	echo -e  "\t-l\t\t show build targets in scripts"
+	echo -e  "\t-l\t\t show build targets in script"
 	echo -e  "\t-e\t\t edit build script : ${BS_SCRIPT}"
 	echo -e  "\t-v\t\t build verbose"
 	echo ""
@@ -612,23 +606,42 @@ function bs_usage () {
 	done
 }
 
-function bs_build_args () {
+function bs_parse_args () {
+	local _bs_info=false _bs_edit=false
+
+	bs_script_get
+
 	while getopts "ms:t:i:c:o:j:levh" opt; do
 	case ${opt} in
 		m ) bs_menuconfig; exit 0;;
-		s )	bs_script_set "${OPTARG}";;
+		s )	_BUILD_SCRIPT="${OPTARG}";;
 		t )	_BUILD_TARGET="${OPTARG}";;
 		i )	_BUILD_IMAGE="${OPTARG}";;
 		c )	_BUILD_COMMAND=${OPTARG};;
-		l )	bs_script_show; exit 0;;
+		l )	_bs_info=true;;
 		o )	_BUILD_OPTION="${OPTARG}";;
 		j ) _BUILD_JOBS="-j${OPTARG}";;
-		e )	bs_script_edit; exit 0;;
+		e )	_bs_edit=true;;
 		v )	_BUILD_VERBOSE=true;;
 		h )	bs_usage; exit 0;;
 		*)	exit 1;;
 	esac
 	done
+
+	if [[ -n ${_BUILD_SCRIPT} ]]; then
+		! bs_script_set "${_BUILD_SCRIPT}" && exit 1;
+		! bs_script_get && exit 1;
+	fi
+
+	if [[ ${_bs_info} == true ]]; then
+		source ${BS_SCRIPT}
+		bs_script_info;
+		exit 0;
+	fi
+	if [[ ${_bs_edit} == true ]]; then
+		bs_script_edit;
+		exit 0;
+	fi
 }
 
 function bs_build_check () {
@@ -712,24 +725,28 @@ function bs_build_run() {
 
 		if [[ ${status} == "unknown" ]]; then
 			logerr " Not support command: '${c}' for '${target['name']}'\n"
-			bs_script_show
+			bs_script_info
 		fi
 	done
 }
 
-if ! bs_script_get; then
-	bs_menuconfig;
-fi
+###############################################################################
+# Start Build Script
+###############################################################################
+
+bs_parse_args "${@}"
 
 if [[ -z ${BS_SCRIPT} ]]; then
 	logerr " Not selected build script !!!"
 	exit 0;
 fi
 
+logmsg " SCRIPT\t: source '${BS_SCRIPT}'\n"
 source ${BS_SCRIPT}
+
 if [[ -z ${BS_TARGETS} ]]; then
 	logerr " None BS_TARGETS : ${BS_SCRIPT} !!!"
 	exit 1;
 fi
-bs_build_args "${@}"
+
 bs_build_run
