@@ -644,7 +644,12 @@ function bs_parse_args () {
 	fi
 }
 
-function bs_build_check () {
+function bs_target_check () {
+	if [[ -z ${BS_TARGETS} ]]; then
+		logerr " None BS_TARGETS : ${BS_SCRIPT} !!!"
+		exit 1;
+	fi
+
 	if [[ -n ${_BUILD_TARGET} ]]; then
 		local found=false
 		local -a list
@@ -664,8 +669,6 @@ function bs_build_check () {
 }
 
 function bs_build_run() {
-	bs_build_check
-
 	for t in ${BS_TARGETS[@]}; do
 		bs_op_assign ${t}
 
@@ -744,9 +747,5 @@ fi
 logmsg " SCRIPT\t: source '${BS_SCRIPT}'\n"
 source ${BS_SCRIPT}
 
-if [[ -z ${BS_TARGETS} ]]; then
-	logerr " None BS_TARGETS : ${BS_SCRIPT} !!!"
-	exit 1;
-fi
-
+bs_target_check
 bs_build_run
