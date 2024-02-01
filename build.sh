@@ -19,10 +19,7 @@
 #
 
 eval "$(locale | sed -e 's/\(.*\)=.*/export \1=en_US.UTF-8/')"
-
-BSP_DIR="$(realpath $(dirname $(realpath "${BASH_SOURCE}"))/../..)"
 BS_SHELL_DIR="$(dirname $(realpath ${BASH_SOURCE}))"
-export BSP_DIR=${BSP_DIR}
 
 function logerr () { echo -e "\033[1;31m$*\033[0m"; }
 function logmsg () { echo -e "\033[0;33m$*\033[0m"; }
