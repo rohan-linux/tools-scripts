@@ -10,9 +10,14 @@
 # 	    ['image']="<build image>"               # optional : build target image names, support multiple image with shell array
 # 	    ['build']="<build directory>"           # optional : build output directory
 # 	    ['output']="<output image>"             # optional : build output image name to install,
-# 	                                                         must be full path, support multiple image with shell array
+# 	                                            #            must be full path, support multiple image with shell array
+# 	                                            #            NOTE. If the type is 'cmake' and 'output' is empty,
+# 	                                                               cmake builder will install using the command
+# 	                                                               'cmake --install --prefix <result>'.
+# 	                                            if type is 'cmake' and this is empty, cmake install use 'cmake --install'
 # 	    ['result']="<result directory>"         # optional : build image's install directory
-# 	    ['install']="<install image>"           # optional : copy name to 'result' dir
+# 	    ['install']="<install image>"           # optional : copies name to 'result' dir,
+# 	                                            #            NOTE. if type is 'cmake' and 'output' is empty, this is install options
 # 	    ['prebuild']="<shell function>"         # optional : pre build shell script function (before config)
 # 	    ['postbuild']="<shell function>"        # optional : post build shell script function (after install)
 #    )
@@ -29,6 +34,7 @@ function logext () { echo -e "\033[1;31m$*\033[0m"; exit -1; }
 # Set Build Script
 ###############################################################################
 BS_SCRIPT_DIR="$(realpath "${BS_SHELL_DIR}/../project")"
+#BS_SCRIPT_DIR="${BS_SHELL_DIR}"
 BS_SCRIPT_CFG="${BS_SCRIPT_DIR}/.bs_config"
 BS_SCRIPT_EXTEN='*.bs'
 BS_SCRIPT=""
@@ -44,7 +50,7 @@ declare -A BS_OP_CMAKE=(
 	['command']=bs_cmake_command
 	['clean']=bs_cmake_clean
 	['delete']=bs_generic_delete
-	['install']=bs_generic_install
+	['install']=bs_cmake_install
 	['prebuild']=bs_generic_func
 	['postbuild']=bs_generic_func
 	['sequence']=${BS_OP_SEQ_CMAKE[*]}
@@ -263,6 +269,31 @@ function bs_cmake_clean () {
 				 "--target clean" )
 
 	[[ -z ${args['build']} ]] && return 1;
+
+	bs_exec "${exec[*]}"
+
+	return ${?}
+}
+
+function bs_cmake_install () {
+	declare -n args="${1}"
+	local out=( ${args['output']} )
+	local exec=( "cmake"
+				 "--install ${args['build']}"
+				 "--prefix ${args['result']}"
+				 "${args['install']}"
+				)
+
+	# If the type is 'cmake' and 'output' is not empty,
+	# cmake builder will copyies 'output' files to 'result' directory
+	# with the name 'install'
+	if [[ -n ${out} ]]; then
+		bs_generic_install "${1}"
+		return ${?}
+	fi
+
+	[[ -n ${args['result']} ]]  && exec+=( "--prefix ${args['result']}" );
+	[[ -n ${args['install']} ]] && exec+=( "${args['install']}" );
 
 	bs_exec "${exec[*]}"
 
