@@ -1,25 +1,28 @@
 #!/bin/bash
 #
 # CMAKE:
-#    declare -A BS_TARGET_ELEMENT=(
-# 	    ['type']="cmake or make or linux"       # required : build type [cmake, make, linux]
-# 	    ['name']="<name>"                       # required : build target name
-# 	    ['source']="<source directory>"         # required : build source directory
-# 	    ['config']="<configuration >"           # required : if type is cmake (cmake config) or linux (defconfig)
-# 	    ['option']="<build option>"             # required : build options
-# 	    ['image']="<build image>"               # optional : build target image names, support multiple image with shell array
-# 	    ['build']="<build directory>"           # optional : build output directory
-# 	    ['output']="<output image>"             # optional : build output image name to install,
-# 	                                            #            must be full path, support multiple image with shell array
-# 	                                            #            NOTE. If the type is 'cmake' and 'output' is empty,
-# 	                                                               cmake builder will install using the command
-# 	                                                               'cmake --install --prefix <result>'.
-# 	                                            if type is 'cmake' and this is empty, cmake install use 'cmake --install'
-# 	    ['result']="<result directory>"         # optional : build image's install directory
-# 	    ['install']="<install image>"           # optional : copies name to 'result' dir,
-# 	                                            #            NOTE. if type is 'cmake' and 'output' is empty, this is install options
-# 	    ['prebuild']="<shell function>"         # optional : pre build shell script function (before config)
-# 	    ['postbuild']="<shell function>"        # optional : post build shell script function (after install)
+#   declare -A BS_TARGET_ELEMENT=(
+#       ['target_name']="<name>"                    # required : build target name
+#       ['build_type']="cmake or make or linux"     # required : build type [cmake, make, linux]
+#
+#       ['source_dir']="<source directory>"         # required : build source directory
+#
+#       ['build_dir']="<build directory>"           # optional : build output directory
+#       ['build_config']="<build configuration >"   # required : if type is linux, specify defconfig
+#       ['build_option']="<build option>"           # required : build options
+#       ['build_images']="<build image>"            # optional : build target images, support multiple image with shell array
+#
+#       ['build_prev']="<shell function>"           # optional : previous build shell script function (before config)
+#       ['build_post']="<shell function>"           # optional : post build shell script function (after install)
+#
+#       ['install_dir']="<install directory>"       # optional : build image's install directory
+#       ['install_option']="<install option>"       # optional : install options
+#       ['install_images']="<output image>"         # optional : build output image names to install,
+#                                                   #            must be full path, support multiple image with shell array
+#                                                   #            NOTE. If the type is 'cmake' and 'install_images' is empty,
+#                                                                      cmake builder will install using the command
+#                                                                      cmake --install <build_dir> --prefix <install_dir>
+#       ['install_names']="<install renames>"       # optional : copies name to 'install_dir',
 #    )
 #
 
@@ -33,8 +36,8 @@ function logext () { echo -e "\033[1;31m$*\033[0m"; exit -1; }
 ###############################################################################
 # Set Build Script
 ###############################################################################
-BS_SCRIPT_DIR="$(realpath "${BS_SHELL_DIR}/../project")"
 #BS_SCRIPT_DIR="${BS_SHELL_DIR}"
+BS_SCRIPT_DIR="$(realpath "${BS_SHELL_DIR}/../project")"
 BS_SCRIPT_CFG="${BS_SCRIPT_DIR}/.bs_config"
 BS_SCRIPT_EXTEN='*.bs'
 BS_SCRIPT=""
@@ -42,8 +45,8 @@ BS_EDITOR='vim'	# editor with '-e' option
 
 ###############################################################################
 # Build Script Build Functions
-BS_OP_SEQ_CMAKE=( 'prebuild' 'config' 'build' 'install' 'postbuild' )
-declare -A BS_OP_CMAKE=(
+BS_BUILD_ORDER_CMAKE=( 'prebuild' 'config' 'build' 'install' 'postbuild' )
+declare -A BS_BUILDER_CMAKE=(
 	['type']="cmake"
 	['config']=bs_cmake_config
 	['build']=bs_cmake_build
@@ -53,11 +56,11 @@ declare -A BS_OP_CMAKE=(
 	['install']=bs_cmake_install
 	['prebuild']=bs_generic_func
 	['postbuild']=bs_generic_func
-	['sequence']=${BS_OP_SEQ_CMAKE[*]}
+	['order']=${BS_BUILD_ORDER_CMAKE[*]}
 )
 
-BS_OP_SEQ_MAKE=( 'prebuild' 'build' 'install' 'postbuild' )
-declare -A BS_OP_MAKE=(
+BS_BUILD_ORDER_MAKE=( 'prebuild' 'build' 'install' 'postbuild' )
+declare -A BS_BUILDER_MAKE=(
 	['type']="make"
 	['build']=bs_make_build
 	['command']=bs_make_command
@@ -66,11 +69,11 @@ declare -A BS_OP_MAKE=(
 	['install']=bs_generic_install
 	['prebuild']=bs_generic_func
 	['postbuild']=bs_generic_func
-	['sequence']=${BS_OP_SEQ_MAKE[*]}
+	['order']=${BS_BUILD_ORDER_MAKE[*]}
 )
 
-BS_OP_SEQ_LINUX=( 'prebuild' 'defconfig' 'build' 'install' 'postbuild' )
-declare -A BS_OP_LINUX=(
+BS_BUILD_ORDER_LINUX=( 'prebuild' 'defconfig' 'build' 'install' 'postbuild' )
+declare -A BS_BUILDER_LINUX=(
 	['type']="linux"
 	['defconfig']=bs_linux_defconfig
 	['menuconfig']=bs_linux_menuconfig
@@ -81,10 +84,10 @@ declare -A BS_OP_LINUX=(
 	['install']=bs_generic_install
 	['prebuild']=bs_generic_func
 	['postbuild']=bs_generic_func
-	['sequence']=${BS_OP_SEQ_LINUX[*]}
+	['order']=${BS_BUILD_ORDER_LINUX[*]}
 )
 
-BS_OP_LISTS=( BS_OP_CMAKE BS_OP_MAKE BS_OP_LINUX )
+BS_BUILDER_LISTS=( BS_BUILDER_CMAKE BS_BUILDER_MAKE BS_BUILDER_LINUX )
 
 _BUILD_TARGET=""
 _BUILD_IMAGE=""
@@ -150,8 +153,8 @@ function bs_exec () {
 
 function bs_generic_install () {
 	declare -n args="${1}"
-	local out=( ${args['output']} ) dst=( ${args['install']} )
-	local dir=${args['result']}
+	local dir=${args['install_dir']}
+	local out=( ${args['install_images']} ) dst=( ${args['install_names']} )
 
 	[[ -z ${out} ]] && return;
 	if ! mkdir -p "${dir}"; then exit 1; fi
@@ -187,7 +190,7 @@ function bs_generic_install () {
 
 function bs_generic_delete () {
 	declare -n args="${1}"
-	local srcdir=${args['source']} outdir=${args['build']}
+	local srcdir=${args['source_dir']} outdir=${args['build_dir']}
 	local exec="rm -rf ${outdir}"
 
 	[[ -z ${outdir} ]] && return 0;
@@ -201,8 +204,10 @@ function bs_generic_delete () {
 function bs_generic_func () {
 	declare -n args="${1}"
 	local type="${2}"
-	local fn=${args[${type}]}
+	local fn=""
 
+	[[ ${type} == "prebuild"  ]] && fn=${args['build_prev']}
+	[[ ${type} == "postbuild" ]] && fn=${args['build_post']}
 	[[ -z ${fn} ]] && return 0;
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
@@ -216,13 +221,15 @@ function bs_generic_func () {
 
 function bs_cmake_config () {
 	declare -n args="${1}"
-	local exec=( "cmake"
-				 "-S ${args['source']}"
-				 "-B ${args['build']}"
-				 "${args['config']}"
-				 "${_BUILD_OPTION}" )
+	local outdir=${args['build_dir']}
 
-	[[ -z ${args['build']} ]] && return 1;
+	[[ -z ${outdir} ]] && outdir="${args['source_dir']}/build";
+
+	local exec=( "cmake"
+				 "-S ${args['source_dir']}"
+				 "-B ${outdir}"
+				 "${args['build_config']}"
+				 "${_BUILD_OPTION}" )
 
 	bs_exec "${exec[*]}"
 
@@ -231,11 +238,12 @@ function bs_cmake_config () {
 
 function bs_cmake_build () {
 	declare -n args="${1}"
-	local outdir=${args['build']}
-	local image=( ${args['image']} )
-	local exec=( "cmake" "--build ${outdir}" "${_BUILD_OPTION}" )
+	local outdir=${args['build_dir']}
+	local image=( ${args['build_images']} )
 
-	[[ -z ${outdir} ]] && return 1;
+	[[ -z ${outdir} ]] && outdir="${args['source_dir']}/build";
+
+	local exec=( "cmake" "--build ${outdir}" "${_BUILD_OPTION}" )
 
 	if [[ ${_BUILD_IMAGE} ]]; then
 		exec+=( "-t ${_BUILD_IMAGE}" );
@@ -251,7 +259,7 @@ function bs_cmake_build () {
 function bs_cmake_command () {
 	declare -n args="${1}"
 	local command="${2}"
-	local outdir=${args['build']}
+	local outdir=${args['build_dir']}
 	local exec=( "cmake" "--build ${outdir}" "${_BUILD_OPTION}" )
 
 	[[ -z ${command} || -z ${outdir} ]] && return 1;
@@ -265,10 +273,10 @@ function bs_cmake_command () {
 function bs_cmake_clean () {
 	declare -n args="${1}"
 	local exec=( "cmake"
-				 "--build ${args['build']}"
+				 "--build ${args['build_dir']}"
 				 "--target clean" )
 
-	[[ -z ${args['build']} ]] && return 1;
+	[[ -z ${args['build_dir']} ]] && return 1;
 
 	bs_exec "${exec[*]}"
 
@@ -277,23 +285,22 @@ function bs_cmake_clean () {
 
 function bs_cmake_install () {
 	declare -n args="${1}"
-	local out=( ${args['output']} )
+	local out=( ${args['install_images']} )
 	local exec=( "cmake"
-				 "--install ${args['build']}"
-				 "--prefix ${args['result']}"
-				 "${args['install']}"
+				 "--install ${args['build_dir']}"
+				 "--prefix ${args['install_dir']}"
 				)
 
-	# If the type is 'cmake' and 'output' is not empty,
-	# cmake builder will copyies 'output' files to 'result' directory
+	# If the type is 'cmake' and 'install_images' is not empty,
+	# cmake builder will copyies 'install_images' files to 'result' directory
 	# with the name 'install'
 	if [[ -n ${out} ]]; then
 		bs_generic_install "${1}"
 		return ${?}
 	fi
 
-	[[ -n ${args['result']} ]]  && exec+=( "--prefix ${args['result']}" );
-	[[ -n ${args['install']} ]] && exec+=( "${args['install']}" );
+	[[ -n ${args['install_dir']} ]]  && exec+=( "--prefix ${args['install_dir']}" );
+	[[ -n ${args['install_option']} ]] && exec+=( "${args['install_option']}" );
 
 	bs_exec "${exec[*]}"
 
@@ -302,8 +309,8 @@ function bs_cmake_install () {
 
 function bs_make_build () {
 	declare -n args="${1}"
-	local srcdir=${args['source']} option=${args['option']}
-	local image=( ${args['image']} )
+	local srcdir=${args['source_dir']} option=${args['build_option']}
+	local image=( ${args['build_images']} )
 	local exec=( "make"
 				 "-C ${srcdir}"
 				 "${option}"
@@ -330,7 +337,7 @@ function bs_make_build () {
 function bs_make_command () {
 	declare -n args="${1}"
 	local command="${2}"
-	local srcdir=${args['source']} option=${args['option']}
+	local srcdir=${args['source_dir']} option=${args['build_option']}
 	local exec=( "make"
 				 "-C ${srcdir}"
 				 "${option}"
@@ -351,8 +358,8 @@ function bs_make_command () {
 function bs_make_clean () {
 	declare -n args="${1}"
 	local exec=( "make"
-				 "-C ${args['source']}"
-				 "${args['option']}"
+				 "-C ${args['source_dir']}"
+				 "${args['build_option']}"
 				 "clean" )
 
 	bs_exec "${exec[*]}"
@@ -362,7 +369,7 @@ function bs_make_clean () {
 
 function bs_linux_defconfig () {
 	declare -n args="${1}"
-	local srcdir=${args['source']} outdir=${args['build']}
+	local srcdir=${args['source_dir']} outdir=${args['build_dir']}
 	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
@@ -376,9 +383,9 @@ function bs_linux_defconfig () {
 		return 0;
 	fi
 
-	exec+=( "${args['option']}"
+	exec+=( "${args['build_option']}"
 			"${_BUILD_OPTION}"
-			"${args['config']}" )
+			"${args['build_config']}" )
 
 	bs_exec "${exec[*]}"
 
@@ -387,7 +394,7 @@ function bs_linux_defconfig () {
 
 function bs_linux_menuconfig () {
 	declare -n args="${1}"
-	local srcdir=${args['source']} outdir=${args['build']}
+	local srcdir=${args['source_dir']} outdir=${args['build_dir']}
 	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
@@ -403,7 +410,7 @@ function bs_linux_menuconfig () {
 		fi
 	fi
 
-	exec+=( "${args['option']}" "menuconfig" )
+	exec+=( "${args['build_option']}" "menuconfig" )
 
 	_BUILD_VERBOSE=true
 	bs_exec "${exec[*]}"
@@ -413,7 +420,7 @@ function bs_linux_menuconfig () {
 
 function bs_linux_build () {
 	declare -n args="${1}"
-	local srcdir=${args['source']} outdir=${args['build']}
+	local srcdir=${args['source_dir']} outdir=${args['build_dir']}
 	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
@@ -429,15 +436,15 @@ function bs_linux_build () {
 		fi
 	fi
 
-	exec+=( "${args['option']}" "${_BUILD_OPTION}" )
+	exec+=( "${args['build_option']}" "${_BUILD_OPTION}" )
 
 	if [[ -n ${_BUILD_IMAGE} ]]; then
 		bs_exec "${exec[*]} ${_BUILD_IMAGE} ${_BUILD_JOBS}"
 		return ${?}
 	fi
 
-	if [[ -n ${args['image']} ]]; then
-		for i in ${args['image']}; do
+	if [[ -n ${args['build_images']} ]]; then
+		for i in ${args['build_images']}; do
 			bs_exec "${exec[*]} ${i} ${_BUILD_JOBS}"
 			[[ ${?} -ne 0 ]] && return 2;
 		done
@@ -452,7 +459,7 @@ function bs_linux_build () {
 function bs_linux_command () {
 	declare -n args="${1}"
 	local command="${2}"
-	local srcdir=${args['source']} outdir=${args['build']}
+	local srcdir=${args['source_dir']} outdir=${args['build_dir']}
 	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
@@ -465,7 +472,7 @@ function bs_linux_command () {
 
 	[[ ${command} == *"menuconfig"* ]] && _BUILD_VERBOSE=true;
 
-	exec+=( "${args['option']}"
+	exec+=( "${args['build_option']}"
 			"${_BUILD_OPTION}"
 			"${command}"
 			"${_BUILD_JOBS}" )
@@ -477,26 +484,26 @@ function bs_linux_command () {
 
 function bs_linux_clean () {
 	declare -n args="${1}"
-	local exec=( "make" "-C ${args['source']}" )
+	local exec=( "make" "-C ${args['source_dir']}" )
 
-	[[ -n ${args['build']} ]] && exec+=( "O=${args['build']}" );
+	[[ -n ${args['build_dir']} ]] && exec+=( "O=${args['build_dir']}" );
 
-	exec+=( "${args['option']}" "clean" )
+	exec+=( "${args['build_option']}" "clean" )
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_op_assign () {
+function bs_builder_assign () {
 	declare -n t="${1}"
 
-	[[ -n ${t['op']} ]] && return;
+	[[ -n ${t['builder']} ]] && return;
 
-	for l in "${BS_OP_LISTS[@]}"; do
+	for l in "${BS_BUILDER_LISTS[@]}"; do
 		declare -n list=${l}
-		if [[ ${t['type']} == ${list['type']} ]]; then
-			t['op']=${l};
+		if [[ ${t['build_type']} == ${list['type']} ]]; then
+			t['builder']=${l};
 			break
 		fi
 	done
@@ -584,15 +591,15 @@ function bs_menuconfig () {
 
 function bs_script_info () {
 	for t in "${BS_TARGETS[@]}"; do
-		bs_op_assign ${t}
+		bs_builder_assign ${t}
 
 		declare -n target=${t}
-		declare -n op=${target['op']}
-		local -a seq=( ${op['sequence']} )
+		declare -n builder=${target['builder']}
+		local -a order=( ${builder['order']} )
 
-		logmsg "${target['name']}";
-		logmsg " - images\t: ${target['image']}";
-		logmsg " - sequence\t: ${seq[*]}";
+		logmsg "${target['target_name']}";
+		logmsg " - images\t: ${target['build_images']}";
+		logmsg " - order\t: ${order[*]}";
 	done
 }
 
@@ -607,9 +614,9 @@ function bs_usage () {
 	echo " option:"
 	echo -e  "\t-m \t select script with menuconfig"
 	echo -e  "\t-s [script]\t set build script."
-	echo -e  "\t-t [target]\t build script's target."
-	echo -e  "\t-i [image]\t build target's image."
-	echo -e  "\t-c [command]\t build commands supported by target."
+	echo -e  "\t-t [target]\t set build script's target."
+	echo -e  "\t-i [image]\t set build target's image."
+	echo -e  "\t-c [command]\t run commands supported by target."
 	echo -e  "\t-o [option]\t add option to build or config."
 	echo -e  "\t-j [jobs]\t set build jobs"
 	echo -e  "\t-l\t\t show build targets in script"
@@ -618,14 +625,14 @@ function bs_usage () {
 	echo ""
 
 	echo " Build commands supported by target type :"
-	local -a op_lists=( ${BS_OP_LISTS[*]} )
-	for i in "${op_lists[@]}"; do
+	local -a builder_lists=( ${BS_BUILDER_LISTS[*]} )
+	for i in "${builder_lists[@]}"; do
 		declare -n t=${i}
-		echo -ne "\033[0;33m* ${t['type']}\t| \033[0m";
+		echo -ne "\033[0;33m* ${t['build_type']}\t| \033[0m";
 		for n in "${!t[@]}"; do
 			[[ ${n} == "type" ]] && continue;
 			[[ ${n} == "name" ]] && continue;
-			[[ ${n} == "sequence" ]] && continue;
+			[[ ${n} == "order" ]] && continue;
 			[[ ${n} == "command" ]] && continue;
 			echo -ne "\033[0;33m${n} \033[0m";
 		done
@@ -683,8 +690,8 @@ function bs_target_check () {
 		local -a list
 		for i in "${BS_TARGETS[@]}"; do
 			declare -n target=${i}
-			list+=( "'${target['name']}'" )
-			if [[ ${target['name']} == ${_BUILD_TARGET} ]]; then
+			list+=( "'${target['target_name']}'" )
+			if [[ ${target['target_name']} == ${_BUILD_TARGET} ]]; then
 				found=true
 				break;
 			fi
@@ -698,53 +705,51 @@ function bs_target_check () {
 
 function bs_build_run() {
 	for t in ${BS_TARGETS[@]}; do
-		bs_op_assign ${t}
+		bs_builder_assign ${t}
 
 		declare -n target="${t}"
-		declare -n op=${target['op']}
+		declare -n builder=${target['builder']}
 		local status="unknown"
 		local command=${_BUILD_COMMAND}
 
 		if [[ -n ${_BUILD_TARGET} &&
-			  ${target['name']} != ${_BUILD_TARGET} ]]; then
+			  ${target['target_name']} != ${_BUILD_TARGET} ]]; then
 			continue;
 		fi
 
-		if [[ ! -d ${target['source']} ]]; then
-			logerr " Error! not found source : '${target['name']}', ${target['source']} !"
+		if [[ ! -d ${target['source_dir']} ]]; then
+			logerr " Error! not found source : '${target['target_name']}', ${target['source_dir']} !"
 			continue
 		fi
 
 		if [[ -n ${command} ]]; then
-			if printf '%s\0' "${!op[@]}" | grep -qwz ${command}; then
-				func=${op[${command}]}
+			if printf '%s\0' "${!builder[@]}" | grep -qwz ${command}; then
+				func=${builder[${command}]}
 			else
-				func=${op['command']}
+				func=${builder['command']}
 			fi
 			[[ -z ${func} ]] && logext " Not, implement command: '${command}'";
 	
-			printf "\033[1;32m %-10s : %-10s\033[0m\n" ${target['name']} ${command}
+			printf "\033[1;32m %-10s : %-10s\033[0m\n" ${target['target_name']} ${command}
 			${func} target "${command}"
 			if [[ ${?} -ne 0 ]]; then
 				logext " Error, Set verbose(-v) to print error log !"
 			fi
 			status="done"
 		else
-			local -a seq=( ${op['sequence']} )
-			for c in ${seq[*]}; do
-				func=${op[${c}]}
+			local -a order=( ${builder['order']} )
+			for c in ${order[*]}; do
+				func=${builder[${c}]}
 				if [[ -z ${func} ]]; then
-					logext " Not implement op : '${c}'"
+					logext " Not implement builder : '${c}'"
 				fi
 
-				if [[ ${func} == 'bs_generic_func' ]]; then
-					if [[ ${c} == 'prebuild'  && -z ${target['prebuild']} ]] ||
-					   [[ ${c} == 'postbuild' && -z ${target['postbuild']} ]]; then
-						continue;
-					fi
+				if [[ ${c} == 'prebuild'  && -z ${target['build_prev']} ]] ||
+				   [[ ${c} == 'postbuild' && -z ${target['build_post']} ]]; then
+					continue;
 				fi
 
-				printf "\033[1;32m %-10s : %-10s\033[0m\n" ${target['name']} ${c}
+				printf "\033[1;32m %-10s : %-10s\033[0m\n" ${target['target_name']} ${c}
 				${func} target "${c}"
 				if [[ ${?} -ne 0 ]]; then
 					logext " Error! Set verbose(-v) to print error log !"
@@ -755,7 +760,7 @@ function bs_build_run() {
 		fi
 
 		if [[ ${status} == "unknown" ]]; then
-			logerr " Not support command: '${c}' for '${target['name']}'\n"
+			logerr " Not support command: '${c}' for '${target['target_name']}'\n"
 			bs_script_info
 		fi
 	done
