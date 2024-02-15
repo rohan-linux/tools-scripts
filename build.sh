@@ -238,12 +238,12 @@ function bs_cmake_config () {
 
 function bs_cmake_build () {
 	declare -n args="${1}"
-	local outdir=${args['build_dir']}
+	local outdir=${args['build_dir']} option=${args['build_option']}
 	local image=( ${args['build_images']} )
 
 	[[ -z ${outdir} ]] && outdir="${args['source_dir']}/build";
 
-	local exec=( "cmake" "--build ${outdir}" "${_BUILD_OPTION}" )
+	local exec=( "cmake" "--build ${outdir}" ${option} "${_BUILD_OPTION}" )
 
 	if [[ ${_BUILD_IMAGE} ]]; then
 		exec+=( "-t ${_BUILD_IMAGE}" );
