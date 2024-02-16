@@ -94,7 +94,6 @@ _BUILD_IMAGE=""
 _BUILD_VERBOSE=false
 _BUILD_OPTION=""
 _BUILD_COMMAND=""
-_BUILD_SCRIPT=""
 _BUILD_JOBS="-j$(grep -c processor /proc/cpuinfo)"
 
 function bs_prog_start () {
@@ -545,6 +544,24 @@ EOF
 	return 0;
 }
 
+function bs_script_show () {
+	for t in "${BS_TARGETS[@]}"; do
+		bs_builder_assign ${t}
+
+		declare -n target=${t}
+		declare -n builder=${target['builder']}
+		local -a order=( ${builder['order']} )
+
+		logmsg "${target['target_name']}";
+		logmsg " - images\t: ${target['build_images']}";
+		logmsg " - order\t: ${order[*]}";
+	done
+}
+
+function bs_script_edit () {
+	${BS_EDITOR} "${BS_SCRIPT}"
+}
+
 function bs_menuconfig () {
 	local path=${BS_SCRIPT_DIR}
 	local -a prog_lits entry
@@ -589,24 +606,6 @@ function bs_menuconfig () {
 	bs_script_set "${BS_SCRIPT}"
 }
 
-function bs_script_info () {
-	for t in "${BS_TARGETS[@]}"; do
-		bs_builder_assign ${t}
-
-		declare -n target=${t}
-		declare -n builder=${target['builder']}
-		local -a order=( ${builder['order']} )
-
-		logmsg "${target['target_name']}";
-		logmsg " - images\t: ${target['build_images']}";
-		logmsg " - order\t: ${order[*]}";
-	done
-}
-
-function bs_script_edit () {
-	${BS_EDITOR} "${BS_SCRIPT}"
-}
-
 function bs_usage () {
 	echo " Usage:"
 	echo -e "\t$(basename "${0}") <option>"
@@ -641,7 +640,8 @@ function bs_usage () {
 	done
 }
 
-function bs_parse_args () {
+function bs_build_args () {
+	local _bs_script=''
 	local _bs_info=false _bs_edit=false
 
 	bs_script_get
@@ -649,7 +649,7 @@ function bs_parse_args () {
 	while getopts "ms:t:i:c:o:j:levh" opt; do
 	case ${opt} in
 		m ) bs_menuconfig; exit 0;;
-		s )	_BUILD_SCRIPT="${OPTARG}";;
+		s )	_bs_script="${OPTARG}";;
 		t )	_BUILD_TARGET="${OPTARG}";;
 		i )	_BUILD_IMAGE="${OPTARG}";;
 		c )	_BUILD_COMMAND=${OPTARG};;
@@ -663,14 +663,14 @@ function bs_parse_args () {
 	esac
 	done
 
-	if [[ -n ${_BUILD_SCRIPT} ]]; then
-		! bs_script_set "${_BUILD_SCRIPT}" && exit 1;
+	if [[ -n ${_bs_script} ]]; then
+		! bs_script_set "${_bs_script}" && exit 1;
 		! bs_script_get && exit 1;
 	fi
 
 	if [[ ${_bs_info} == true ]]; then
 		source ${BS_SCRIPT}
-		bs_script_info;
+		bs_script_show;
 		exit 0;
 	fi
 	if [[ ${_bs_edit} == true ]]; then
@@ -679,12 +679,13 @@ function bs_parse_args () {
 	fi
 }
 
-function bs_target_check () {
+function bs_build_check () {
 	if [[ -z ${BS_TARGETS} ]]; then
 		logerr " None BS_TARGETS : ${BS_SCRIPT} !!!"
 		exit 1;
 	fi
 
+	# Check build target
 	if [[ -n ${_BUILD_TARGET} ]]; then
 		local found=false
 		local -a list
@@ -703,7 +704,7 @@ function bs_target_check () {
 	fi
 }
 
-function bs_build_run() {
+function bs_build_run () {
 	for t in ${BS_TARGETS[@]}; do
 		bs_builder_assign ${t}
 
@@ -761,16 +762,16 @@ function bs_build_run() {
 
 		if [[ ${status} == "unknown" ]]; then
 			logerr " Not support command: '${c}' for '${target['target_name']}'\n"
-			bs_script_info
+			bs_script_show
 		fi
 	done
 }
 
 ###############################################################################
-# Start Build Script
+# Start Build !!!
 ###############################################################################
 
-bs_parse_args "${@}"
+bs_build_args "${@}"
 
 if [[ -z ${BS_SCRIPT} ]]; then
 	logerr " Not selected build script !!!"
@@ -780,5 +781,5 @@ fi
 logmsg " SCRIPT\t: source '${BS_SCRIPT}'\n"
 source ${BS_SCRIPT}
 
-bs_target_check
+bs_build_check
 bs_build_run
