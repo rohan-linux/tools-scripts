@@ -12,7 +12,6 @@
 #       ['build_config']="<build configuration >"   # required : if type is linux, specify defconfig
 #       ['build_option']="<build option>"           # required : build options
 #       ['build_images']="<build image>"            # optional : build target images, support multiple image with shell array
-#
 #       ['build_finalize']="<shell function>"       # optional : finalize build shell script function (after build)
 #
 #       ['install_directory']="<install directory>" # optional : build image's install directory
@@ -156,27 +155,27 @@ function bs_exec () {
 
 function bs_generic_install () {
 	declare -n args="${1}"
-	local dir=${args['install_directory']}
-	local out=( ${args['install_images']} ) dst=( ${args['install_names']} )
+	local dstdir=${args['install_directory']}
+	local dstimg=( ${args['install_images']} ) dstname=( ${args['install_names']} )
 
-	[[ -z ${out} ]] && return;
-	if ! mkdir -p "${dir}"; then exit 1; fi
+	[[ -z ${dstimg} ]] && return;
+	if ! mkdir -p "${dstdir}"; then exit 1; fi
 
-	for (( i = 0 ; i < ${#out[*]} ; i++ )) ; do
-		local obj=$(realpath "${dir}/${dst[$i]}")
-		logmsg "   ${out[$i]} > ${obj}"
+	for (( i = 0 ; i < ${#dstimg[*]} ; i++ )) ; do
+		local obj=$(realpath "${dstdir}/${dstname[$i]}")
+		logmsg "   ${dstimg[$i]} > ${obj}"
 	done
 
 	[[ ${_BUILD_VERBOSE} == false ]] && bs_prog_run;
 
-	for (( i = 0 ; i < ${#out[*]} ; i++ )) ; do
+	for (( i = 0 ; i < ${#dstimg[*]} ; i++ )) ; do
 		# delete target directory
-		if [[ -z ${dst[$i]} ]] && [[ -d ${out[$i]} ]] &&
-		   [[ -d "${dir}/$(basename "${out[$i]}")" ]]; then
-			bash -c "rm -rf ${dir}/$(basename "${out[$i]}")"
+		if [[ -z ${dstname[$i]} ]] && [[ -d ${dstimg[$i]} ]] &&
+		   [[ -d "${dstdir}/$(basename "${dstimg[$i]}")" ]]; then
+			bash -c "rm -rf ${dstdir}/$(basename "${dstimg[$i]}")"
 		fi
-		local obj=$(realpath "${dir}/${dst[$i]}")
-		local exec="cp -a ${out[$i]} ${obj}"
+		local obj=$(realpath "${dstdir}/${dstname[$i]}")
+		local exec="cp -a ${dstimg[$i]} ${obj}"
 		if [[ ${_BUILD_VERBOSE} == true ]]; then
 			bash -c "${exec}"
 			err=${?}
@@ -206,8 +205,7 @@ function bs_generic_delete () {
 
 function bs_generic_func () {
 	declare -n args="${1}"
-	local type="${2}"
-	local fn=""
+	local type="${2}" fn=""
 
 	[[ ${type} == "prepare"  ]] && fn=${args['build_prepare']}
 	[[ ${type} == "finalize" ]] && fn=${args['build_finalize']}
@@ -244,7 +242,7 @@ function bs_cmake_config () {
 function bs_cmake_build () {
 	declare -n args="${1}"
 	local outdir=${args['build_directory']} option=${args['build_option']}
-	local image=( ${args['build_images']} )
+	local outimg=( ${args['build_images']} )
 
 	[[ -z ${outdir} ]] && outdir="${args['source_directory']}/build";
 
@@ -252,8 +250,8 @@ function bs_cmake_build () {
 
 	if [[ ${_BUILD_IMAGE} ]]; then
 		exec+=( "-t ${_BUILD_IMAGE}" );
-	elif [[ ${image} ]]; then
-		exec+=( "-t ${image[*]}" );
+	elif [[ ${outimg} ]]; then
+		exec+=( "-t ${outimg[*]}" );
 	fi
 
 	bs_exec "${exec[*]} ${_BUILD_JOBS}"
@@ -290,7 +288,7 @@ function bs_cmake_clean () {
 
 function bs_cmake_install () {
 	declare -n args="${1}"
-	local out=( ${args['install_images']} )
+	local dstimg=( ${args['install_images']} )
 	local exec=( "cmake"
 				 "--install ${args['build_directory']}"
 				 "--prefix ${args['install_directory']}"
@@ -299,12 +297,12 @@ function bs_cmake_install () {
 	# If the type is 'cmake' and 'install_images' is not empty,
 	# cmake builder will copyies 'install_images' files to 'result' directory
 	# with the name 'install'
-	if [[ -n ${out} ]]; then
+	if [[ -n ${dstimg} ]]; then
 		bs_generic_install "${1}"
 		return ${?}
 	fi
 
-	[[ -n ${args['install_directory']} ]]  && exec+=( "--prefix ${args['install_directory']}" );
+	[[ -n ${args['install_directory']} ]] && exec+=( "--prefix ${args['install_directory']}" );
 	[[ -n ${args['install_option']} ]] && exec+=( "${args['install_option']}" );
 
 	bs_exec "${exec[*]}"
@@ -315,7 +313,7 @@ function bs_cmake_install () {
 function bs_make_build () {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} option=${args['build_option']}
-	local image=( ${args['build_images']} )
+	local outimg=( ${args['build_images']} )
 	local exec=( "make"
 				 "-C ${srcdir}"
 				 "${option}"
@@ -326,8 +324,8 @@ function bs_make_build () {
 		return ${?}
 	fi
 
-	if [[ ${image} ]]; then
-		for i in ${image[*]}; do
+	if [[ ${outimg} ]]; then
+		for i in ${outimg[*]}; do
 			bs_exec "${exec[*]} ${i} ${_BUILD_JOBS}"
 			[[ ${?} -ne 0 ]] && return 2;
 		done
@@ -375,16 +373,16 @@ function bs_make_clean () {
 function bs_linux_defconfig () {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
 	if [[ -n ${outdir} ]]; then
-		path=${outdir}
-		exec+=( "O=${path}" );
+		exec+=( "O=${outdir}" );
+	else
+		outdir=${srcdir}
 	fi
 
-	if [[ -f "${path}/.config" ]]; then
-		logmsg " - skip defconfig, exist '${path}/.config' ..."
+	if [[ -f "${outdir}/.config" ]]; then
+		logmsg " - skip defconfig, exist '${outdir}/.config' ..."
 		return 0;
 	fi
 
@@ -400,16 +398,16 @@ function bs_linux_defconfig () {
 function bs_linux_menuconfig () {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
 	if [[ -n ${outdir} ]]; then
-		path=${outdir}
-		exec+=( "O=${path}" );
+		exec+=( "O=${outdir}" );
+	else
+		outdir=${srcdir}
 	fi
 
 	# check default config
-	if [[ ! -d "$(realpath ${path})" || ! -f "$(realpath ${path})/.config" ]]; then
+	if [[ ! -d "$(realpath ${outdir})" || ! -f "$(realpath ${outdir})/.config" ]]; then
 		if ! bs_linux_defconfig ${1}; then
 			return 1;
 		fi
@@ -426,16 +424,16 @@ function bs_linux_menuconfig () {
 function bs_linux_build () {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
 	if [[ -n ${outdir} ]]; then
-		path=${outdir}
-		exec+=( "O=${path}" );
+		exec+=( "O=${outdir}" );
+	else
+		outdir=${srcdir}
 	fi
 
 	# check default config
-	if [[ ! -d "$(realpath ${path})" || ! -f "$(realpath ${path})/.config" ]]; then
+	if [[ ! -d "$(realpath ${outdir})" || ! -f "$(realpath ${outdir})/.config" ]]; then
 		if ! bs_linux_defconfig ${1}; then
 			return 1;
 		fi
@@ -465,14 +463,12 @@ function bs_linux_command () {
 	declare -n args="${1}"
 	local command="${2}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local path="${srcdir}"
 	local exec=( "make" "-C ${srcdir}" )
 
 	[[ -z ${command} ]] && return 1;
 
 	if [[ -n ${outdir} ]]; then
-		path=${outdir}
-		exec+=( "O=${path}" );
+		exec+=( "O=${outdir}" );
 	fi
 
 	[[ ${command} == *"menuconfig"* ]] && _BUILD_VERBOSE=true;
@@ -675,7 +671,7 @@ function bs_build_args () {
 	fi
 
 	if [[ ${_bs_info} == true ]]; then
-		source ${BS_SCRIPT}
+		source "${BS_SCRIPT}"
 		bs_script_show;
 		exit 0;
 	fi
@@ -737,7 +733,7 @@ function bs_build_run () {
 			fi
 			[[ -z ${func} ]] && logext " Not, implement command: '${command}'";
 	
-			printf "\033[1;32m %-10s : %-10s\033[0m\n" ${target['target_name']} ${command}
+			printf "\033[1;32m %-10s : %-10s\033[0m\n" "${target['target_name']}" "${command}"
 			${func} target "${command}"
 			if [[ ${?} -ne 0 ]]; then
 				logext " Error, Set verbose(-v) to print error log !"
@@ -757,7 +753,7 @@ function bs_build_run () {
 					continue;
 				fi
 
-				printf "\033[1;32m %-10s : %-10s\033[0m\n" ${target['target_name']} ${c}
+				printf "\033[1;32m %-10s : %-10s\033[0m\n" "${target['target_name']}" "${c}"
 				${func} target "${c}"
 				if [[ ${?} -ne 0 ]]; then
 					logext " Error! Set verbose(-v) to print error log !"
@@ -786,7 +782,7 @@ if [[ -z ${BS_SCRIPT} ]]; then
 fi
 
 logmsg " SCRIPT\t: source '${BS_SCRIPT}'\n"
-source ${BS_SCRIPT}
+source "${BS_SCRIPT}"
 
 bs_build_check
 bs_build_run
