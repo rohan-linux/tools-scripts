@@ -8,11 +8,11 @@
 #       ['source_directory']="<source directory>"   # required : build source directory
 #
 #       ['build_directory']="<build directory>"     # optional : build output directory
-#       ['build_prepare']="<shell function>"        # optional : prepare build shell script function (before config)
+#       ['build_prepare']="<shell function>"        # optional : prepare build shell function (before config)
 #       ['build_config']="<build configuration >"   # required : if type is linux, specify defconfig
 #       ['build_option']="<build option>"           # required : build options
 #       ['build_images']="<build image>"            # optional : build target images, support multiple image with shell array
-#       ['build_finalize']="<shell function>"       # optional : finalize build shell script function (after build)
+#       ['build_finalize']="<shell function>"       # optional : finalize build shell function (after build)
 #
 #       ['install_directory']="<install directory>" # optional : build image's install directory
 #       ['install_option']="<install option>"       # optional : install options
@@ -22,30 +22,26 @@
 #                                                                      cmake builder will install using the command
 #                                                                      cmake --install <build_directory> --prefix <install_directory>
 #       ['install_names']="<install renames>"       # optional : copies name to 'install_directory',
-#       ['install_complete']="<shell function>"     # optional : shell script function (after install)
+#       ['install_complete']="<shell function>"     # optional : shell function (after install)
 #    )
 #
 
 eval "$(locale | sed -e 's/\(.*\)=.*/export \1=en_US.UTF-8/')"
-BS_SHELL_DIR="$(dirname $(realpath ${BASH_SOURCE}))"
-
-function logerr () { echo -e "\033[1;31m$*\033[0m"; }
-function logmsg () { echo -e "\033[0;33m$*\033[0m"; }
-function logext () { echo -e "\033[1;31m$*\033[0m"; exit -1; }
+BS_SHELL_DIR=$(dirname "$(realpath "${0}")")
 
 ###############################################################################
-# Set Build Script
+# Set Build project shell script
 ###############################################################################
-#BS_SCRIPT_DIR="${BS_SHELL_DIR}"
-BS_SCRIPT_DIR="$(realpath "${BS_SHELL_DIR}/../project")"
-BS_SCRIPT_CFG="${BS_SCRIPT_DIR}/.bs_config"
-BS_SCRIPT_EXTEN='*.bs'
-BS_SCRIPT=""
-BS_EDITOR='vim'	# editor with '-e' option
+BS_PROJECT_DIR="$(realpath "${BS_SHELL_DIR}/../project")"
+BS_PROJECT_CFG="${BS_PROJECT_DIR}/.bs_config"
+BS_PROJECT_EXTEN='bs' # project file extention '*.bs'
+BS_PROJECT_SH=""
+BS_EDITOR='vim' # editor with '-e' option
 
 ###############################################################################
-# Build Script Build Functions
-BS_BUILD_ORDER_CMAKE=( 'prepare' 'config' 'build' 'finalize' 'install' 'complete'  )
+# Build Functions
+BS_BUILD_ORDER_CMAKE=('prepare' 'config' 'build' 'finalize' 'install' 'complete')
+# shellcheck disable=SC2034
 declare -A BS_BUILDER_CMAKE=(
 	['type']="cmake"
 	['config']=bs_cmake_config
@@ -60,7 +56,8 @@ declare -A BS_BUILDER_CMAKE=(
 	['order']=${BS_BUILD_ORDER_CMAKE[*]}
 )
 
-BS_BUILD_ORDER_MAKE=( 'prepare' 'build' 'finalize' 'install' 'complete' )
+BS_BUILD_ORDER_MAKE=('prepare' 'build' 'finalize' 'install' 'complete')
+# shellcheck disable=SC2034
 declare -A BS_BUILDER_MAKE=(
 	['type']="make"
 	['build']=bs_make_build
@@ -74,7 +71,8 @@ declare -A BS_BUILDER_MAKE=(
 	['order']=${BS_BUILD_ORDER_MAKE[*]}
 )
 
-BS_BUILD_ORDER_LINUX=( 'prepare' 'defconfig' 'build' 'finalize' 'install' 'complete' )
+BS_BUILD_ORDER_LINUX=('prepare' 'defconfig' 'build' 'finalize' 'install' 'complete')
+# shellcheck disable=SC2034
 declare -A BS_BUILDER_LINUX=(
 	['type']="linux"
 	['defconfig']=bs_linux_defconfig
@@ -90,39 +88,47 @@ declare -A BS_BUILDER_LINUX=(
 	['order']=${BS_BUILD_ORDER_LINUX[*]}
 )
 
-BS_BUILDER_LISTS=( BS_BUILDER_CMAKE BS_BUILDER_MAKE BS_BUILDER_LINUX )
+BS_BUILDER_LISTS=(BS_BUILDER_CMAKE BS_BUILDER_MAKE BS_BUILDER_LINUX)
 
 _BUILD_TARGET=""
 _BUILD_IMAGE=""
 _BUILD_VERBOSE=false
 _BUILD_OPTION=""
 _BUILD_COMMAND=""
+_BUILD_FORCE=false
 _BUILD_JOBS="-j$(grep -c processor /proc/cpuinfo)"
 
-function bs_prog_start () {
+function logerr() { echo -e "\033[1;31m$*\033[0m"; }
+function logmsg() { echo -e "\033[0;33m$*\033[0m"; }
+function logext() {
+	echo -e "\033[1;31m$*\033[0m"
+	exit 1
+}
+
+function bs_prog_start() {
 	local spin='-\|/' pos=0
 	local delay=0.3 start=${SECONDS}
 	while true; do
-		local hrs=$(( (SECONDS-start)/3600 ));
-		local min=$(( (SECONDS-start-hrs*3600)/60 ));
-		local sec=$(( (SECONDS-start)-hrs*3600-min*60 ))
-		pos=$(( (pos + 1) % 4 ))
+		local hrs=$(((SECONDS - start) / 3600))
+		local min=$(((SECONDS - start - hrs * 3600) / 60))
+		local sec=$(((SECONDS - start) - hrs * 3600 - min * 60))
+		pos=$(((pos + 1) % 4))
 		printf "\r\t: Progress |${spin:$pos:1}| %d:%02d:%02d" ${hrs} ${min} ${sec}
 		sleep ${delay}
 	done
 }
 
-function bs_prog_kill () {
+function bs_prog_kill() {
 	local pid=${BS_PROG_ID}
-	if pidof ${pid}; then return; fi
+	if pidof "${pid}"; then return; fi
 	if [[ ${pid} -ne 0 ]] && [[ -e /proc/${pid} ]]; then
-		kill "${pid}" 2> /dev/null
-		wait "${pid}" 2> /dev/null
+		kill "${pid}" 2>/dev/null
+		wait "${pid}" 2>/dev/null
 		echo ""
 	fi
 }
 
-function bs_prog_run () {
+function bs_prog_run() {
 	bs_prog_kill
 	bs_prog_start &
 	echo -en " ${!}"
@@ -131,13 +137,11 @@ function bs_prog_run () {
 
 trap bs_prog_kill EXIT
 
-function bs_exec () {
+function bs_exec() {
 	local exec=${1} err
 
 	# remove first,last space and set multiple space to single space
-	exec="$(echo "${exec}" | sed 's/^[ \t]*//;s/[ \t]*$//')"
-	exec="$(echo "${exec}" | sed 's/\s\s*/ /g')"
-
+	exec="$(echo "${exec}" | sed 's/^[ \t]*//;s/[ \t]*$//;s/\s\s*/ /g')"
 	logmsg " $ ${exec}"
 
 	if [[ ${_BUILD_VERBOSE} == true ]]; then
@@ -145,7 +149,7 @@ function bs_exec () {
 		err=${?}
 	else
 		bs_prog_run
-		bash -c "${exec}" > /dev/null 2>&1
+		bash -c "${exec}" >/dev/null 2>&1
 		err=${?}
 		bs_prog_kill
 	fi
@@ -153,68 +157,82 @@ function bs_exec () {
 	return ${err}
 }
 
-function bs_generic_install () {
+function bs_generic_install() {
 	declare -n args="${1}"
 	local dstdir=${args['install_directory']}
-	local dstimg=( ${args['install_images']} ) dstname=( ${args['install_names']} )
+	local dstimg=() dstname=()
+	local exec
 
-	[[ -z ${dstimg} ]] && return;
+	IFS=" " read -r -a dstimg <<<"${args['install_images']}"
+	IFS=" " read -r -a dstname <<<"${args['install_names']}"
+
+	[[ -z ${dstimg[*]} ]] && return
+
 	if ! mkdir -p "${dstdir}"; then exit 1; fi
 
-	for (( i = 0 ; i < ${#dstimg[*]} ; i++ )) ; do
-		local obj=$(realpath "${dstdir}/${dstname[$i]}")
-		logmsg "   ${dstimg[$i]} > ${obj}"
+	# print install images
+	for i in ${!dstimg[*]}; do
+		if [[ ! -f "${dstimg[${i}]}" ]] && [[ ! -d "${dstimg[${i}]}" ]]; then
+			logerr "   No such file or directory: '${dstimg[${i}]}'"
+			if [[ ${_BUILD_FORCE} == true ]]; then
+				# remove element
+				unset 'dstimg[i]'
+				continue
+			fi
+			return 1
+		fi
+		logmsg "   ${dstimg[${i}]} > $(realpath "${dstdir}/${dstname[${i}]}")"
 	done
 
-	[[ ${_BUILD_VERBOSE} == false ]] && bs_prog_run;
+	[[ ${_BUILD_VERBOSE} == false ]] && bs_prog_run
 
-	for (( i = 0 ; i < ${#dstimg[*]} ; i++ )) ; do
+	# copy install images
+	for i in ${!dstimg[*]}; do
 		# delete target directory
 		if [[ -z ${dstname[$i]} ]] && [[ -d ${dstimg[$i]} ]] &&
-		   [[ -d "${dstdir}/$(basename "${dstimg[$i]}")" ]]; then
+			[[ -d "${dstdir}/$(basename "${dstimg[$i]}")" ]]; then
 			bash -c "rm -rf ${dstdir}/$(basename "${dstimg[$i]}")"
 		fi
-		local obj=$(realpath "${dstdir}/${dstname[$i]}")
-		local exec="cp -a ${dstimg[$i]} ${obj}"
+		exec="cp -a ${dstimg[$i]} $(realpath "${dstdir}/${dstname[$i]}")"
 		if [[ ${_BUILD_VERBOSE} == true ]]; then
 			bash -c "${exec}"
 			err=${?}
 		else
-			bash -c "${exec}" > /dev/null 2>&1
+			bash -c "${exec}" >/dev/null 2>&1
 			err=${?}
 		fi
 	done
 
-	[[ ${_BUILD_VERBOSE} == false ]] && bs_prog_kill;
+	[[ ${_BUILD_VERBOSE} == false ]] && bs_prog_kill
 
-	return ${err}
+	return "${err}"
 }
 
-function bs_generic_delete () {
+function bs_generic_delete() {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
 	local exec="rm -rf ${outdir}"
 
-	[[ -z ${outdir} ]] && return 0;
-	[[ $(realpath ${srcdir}) == $(realpath ${outdir}) ]] && return 0;
+	[[ -z ${outdir} ]] && return 0
+	[[ $(realpath "${srcdir}") == $(realpath "${outdir}") ]] && return 0
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_generic_func () {
+function bs_generic_func() {
 	declare -n args="${1}"
 	local type="${2}" fn=""
 
-	[[ ${type} == "prepare"  ]] && fn=${args['build_prepare']}
+	[[ ${type} == "prepare" ]] && fn=${args['build_prepare']}
 	[[ ${type} == "finalize" ]] && fn=${args['build_finalize']}
 	[[ ${type} == "complete" ]] && fn=${args['install_complete']}
 
-	[[ -z ${fn} ]] && return 0;
+	[[ -z ${fn} ]] && return 0
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} ${1} "${type}"
+		${fn} "${1}" "${type}"
 	else
 		bs_exec "${fn}"
 	fi
@@ -222,36 +240,39 @@ function bs_generic_func () {
 	return ${?}
 }
 
-function bs_cmake_config () {
+function bs_cmake_config() {
 	declare -n args="${1}"
 	local outdir=${args['build_directory']}
 
-	[[ -z ${outdir} ]] && outdir="${args['source_directory']}/build";
+	[[ -z ${outdir} ]] && outdir="${args['source_directory']}/build"
 
-	local exec=( "cmake"
-				 "-S ${args['source_directory']}"
-				 "-B ${outdir}"
-				 "${args['build_config']}"
-				 "${_BUILD_OPTION}" )
+	local exec=("cmake"
+		"-S ${args['source_directory']}"
+		"-B ${outdir}"
+		"${args['build_config']}"
+		"${_BUILD_OPTION}")
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_cmake_build () {
+function bs_cmake_build() {
 	declare -n args="${1}"
-	local outdir=${args['build_directory']} option=${args['build_option']}
-	local outimg=( ${args['build_images']} )
+	declare -n outimg=args['build_images']
+	local outdir=${args['build_directory']}
+	local exec=()
 
-	[[ -z ${outdir} ]] && outdir="${args['source_directory']}/build";
+	[[ -z ${outdir} ]] && outdir="${args['source_directory']}/build"
 
-	local exec=( "cmake" "--build ${outdir}" ${option} "${_BUILD_OPTION}" )
+	exec=("cmake"
+		"--build ${outdir}"
+		"${args['build_option']}" "${_BUILD_OPTION}")
 
 	if [[ ${_BUILD_IMAGE} ]]; then
-		exec+=( "-t ${_BUILD_IMAGE}" );
-	elif [[ ${outimg} ]]; then
-		exec+=( "-t ${outimg[*]}" );
+		exec+=("-t ${_BUILD_IMAGE}")
+	elif [[ "${outimg}" ]]; then
+		exec+=("-t ${outimg}")
 	fi
 
 	bs_exec "${exec[*]} ${_BUILD_JOBS}"
@@ -259,65 +280,63 @@ function bs_cmake_build () {
 	return ${?}
 }
 
-function bs_cmake_command () {
+function bs_cmake_command() {
 	declare -n args="${1}"
-	local command="${2}"
+	local cmd="${2}"
 	local outdir=${args['build_directory']}
-	local exec=( "cmake" "--build ${outdir}" "${_BUILD_OPTION}" )
+	local exec=("cmake" "--build ${outdir}" "${_BUILD_OPTION}" "${cmd}")
 
-	[[ -z ${command} || -z ${outdir} ]] && return 1;
+	[[ -z ${cmd} ]] && return 1
+	[[ -z ${outdir} ]] && outdir="${args['source_directory']}/build"
 
-	exec+=( "-t ${command}" );
 	bs_exec "${exec[*]} ${_BUILD_JOBS}"
 
 	return ${?}
 }
 
-function bs_cmake_clean () {
+function bs_cmake_clean() {
 	declare -n args="${1}"
-	local exec=( "cmake"
-				 "--build ${args['build_directory']}"
-				 "--target clean" )
+	local exec=("cmake"
+		"--build ${args['build_directory']}"
+		"${_BUILD_OPTION}"
+		"--target clean")
 
-	[[ -z ${args['build_directory']} ]] && return 1;
+	[[ -z ${args['build_directory']} ]] && return 1
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_cmake_install () {
+function bs_cmake_install() {
 	declare -n args="${1}"
-	local dstimg=( ${args['install_images']} )
-	local exec=( "cmake"
-				 "--install ${args['build_directory']}"
-				 "--prefix ${args['install_directory']}"
-				)
+	local dstimg=args['install_images']
+	local exec=("cmake" "--install ${args['build_directory']}")
 
 	# If the type is 'cmake' and 'install_images' is not empty,
 	# cmake builder will copyies 'install_images' files to 'result' directory
 	# with the name 'install'
-	if [[ -n ${dstimg} ]]; then
+	if [[ ${dstimg} ]]; then
 		bs_generic_install "${1}"
 		return ${?}
 	fi
 
-	[[ -n ${args['install_directory']} ]] && exec+=( "--prefix ${args['install_directory']}" );
-	[[ -n ${args['install_option']} ]] && exec+=( "${args['install_option']}" );
+	[[ -n ${args['install_directory']} ]] && exec+=("--prefix ${args['install_directory']}")
+
+	exec+=("${args['install_option']}" "${_BUILD_OPTION}")
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_make_build () {
+function bs_make_build() {
 	declare -n args="${1}"
-	local srcdir=${args['source_directory']} option=${args['build_option']}
-	local outimg=( ${args['build_images']} )
-	local exec=( "make"
-				 "-C ${srcdir}"
-				 "${option}"
-				 "${_BUILD_OPTION}" )
+	local srcdir=${args['source_directory']}
+	declare -n outimg=args['build_images']
+	local exec=("make"
+		"-C ${srcdir}"
+		"${args['build_option']}" "${_BUILD_OPTION}")
 
 	if [[ -n ${_BUILD_IMAGE} ]]; then
 		bs_exec "${exec[*]} ${_BUILD_IMAGE} ${_BUILD_JOBS}"
@@ -325,31 +344,31 @@ function bs_make_build () {
 	fi
 
 	if [[ ${outimg} ]]; then
-		for i in ${outimg[*]}; do
-			bs_exec "${exec[*]} ${i} ${_BUILD_JOBS}"
-			[[ ${?} -ne 0 ]] && return 2;
+		for i in ${outimg}; do
+			if ! bs_exec "${exec[*]} ${i} ${_BUILD_JOBS}"; then
+				return 2
+			fi
 		done
 		return 0
 	fi
-	
+
 	bs_exec "${exec[*]} ${_BUILD_JOBS}"
 
 	return ${?}
 }
 
-function bs_make_command () {
+function bs_make_command() {
 	declare -n args="${1}"
-	local command="${2}"
-	local srcdir=${args['source_directory']} option=${args['build_option']}
-	local exec=( "make"
-				 "-C ${srcdir}"
-				 "${option}"
-				 "${_BUILD_OPTION}" )
+	local cmd="${2}"
+	local srcdir=${args['source_directory']}
+	local exec=("make"
+		"-C ${srcdir}"
+		"${args['build_option']}" "${_BUILD_OPTION}")
 
-	[[ -z ${command} ]] && return 1;
+	[[ -z ${cmd} ]] && return 1
 
 	if [[ -n ${_BUILD_IMAGE} ]]; then
-		bs_exec "${exec[*]} ${_BUILD_IMAGE} ${command} ${_BUILD_JOBS}"
+		bs_exec "${exec[*]} ${_BUILD_IMAGE} ${cmd} ${_BUILD_JOBS}"
 		return ${?}
 	fi
 
@@ -358,62 +377,58 @@ function bs_make_command () {
 	return ${?}
 }
 
-function bs_make_clean () {
+function bs_make_clean() {
 	declare -n args="${1}"
-	local exec=( "make"
-				 "-C ${args['source_directory']}"
-				 "${args['build_option']}"
-				 "clean" )
+	local exec=("make" "-C ${args['source_directory']}"
+		"${args['build_option']}" "${_BUILD_OPTION}" "clean")
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_linux_defconfig () {
+function bs_linux_defconfig() {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local exec=( "make" "-C ${srcdir}" )
+	local exec=("make" "-C ${srcdir}")
 
 	if [[ -n ${outdir} ]]; then
-		exec+=( "O=${outdir}" );
+		exec+=("O=${outdir}")
 	else
 		outdir=${srcdir}
 	fi
 
 	if [[ -f "${outdir}/.config" ]]; then
 		logmsg " - skip defconfig, exist '${outdir}/.config' ..."
-		return 0;
+		return 0
 	fi
 
-	exec+=( "${args['build_option']}"
-			"${_BUILD_OPTION}"
-			"${args['build_config']}" )
+	exec+=("${args['build_option']}" "${_BUILD_OPTION}" "${args['build_config']}")
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_linux_menuconfig () {
+function bs_linux_menuconfig() {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local exec=( "make" "-C ${srcdir}" )
+	local exec=("make" "-C ${srcdir}")
 
 	if [[ -n ${outdir} ]]; then
-		exec+=( "O=${outdir}" );
+		exec+=("O=${outdir}")
 	else
 		outdir=${srcdir}
 	fi
 
 	# check default config
-	if [[ ! -d "$(realpath ${outdir})" || ! -f "$(realpath ${outdir})/.config" ]]; then
-		if ! bs_linux_defconfig ${1}; then
-			return 1;
+	if [[ ! -d "$(realpath "${outdir}")" || ! -f "$(realpath "${outdir}")/.config" ]]; then
+		if ! bs_linux_defconfig "${1}"; then
+			return 1
 		fi
 	fi
 
-	exec+=( "${args['build_option']}" "menuconfig" )
+	exec+=("${args['build_option']}" "menuconfig")
 
 	_BUILD_VERBOSE=true
 	bs_exec "${exec[*]}"
@@ -421,25 +436,25 @@ function bs_linux_menuconfig () {
 	return ${?}
 }
 
-function bs_linux_build () {
+function bs_linux_build() {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local exec=( "make" "-C ${srcdir}" )
+	local exec=("make" "-C ${srcdir}")
 
 	if [[ -n ${outdir} ]]; then
-		exec+=( "O=${outdir}" );
+		exec+=("O=${outdir}")
 	else
 		outdir=${srcdir}
 	fi
 
 	# check default config
-	if [[ ! -d "$(realpath ${outdir})" || ! -f "$(realpath ${outdir})/.config" ]]; then
-		if ! bs_linux_defconfig ${1}; then
-			return 1;
+	if [[ ! -d "$(realpath "${outdir}")" || ! -f "$(realpath "${outdir}")/.config" ]]; then
+		if ! bs_linux_defconfig "${1}"; then
+			return 1
 		fi
 	fi
 
-	exec+=( "${args['build_option']}" "${_BUILD_OPTION}" )
+	exec+=("${args['build_option']}" "${_BUILD_OPTION}")
 
 	if [[ -n ${_BUILD_IMAGE} ]]; then
 		bs_exec "${exec[*]} ${_BUILD_IMAGE} ${_BUILD_JOBS}"
@@ -448,8 +463,9 @@ function bs_linux_build () {
 
 	if [[ -n ${args['build_images']} ]]; then
 		for i in ${args['build_images']}; do
-			bs_exec "${exec[*]} ${i} ${_BUILD_JOBS}"
-			[[ ${?} -ne 0 ]] && return 2;
+			if ! bs_exec "${exec[*]} ${i} ${_BUILD_JOBS}"; then
+				return 2
+			fi
 		done
 	else
 		# buildroot has no image names
@@ -459,232 +475,239 @@ function bs_linux_build () {
 	return 0
 }
 
-function bs_linux_command () {
+function bs_linux_command() {
 	declare -n args="${1}"
-	local command="${2}"
+	local cmd="${2}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
-	local exec=( "make" "-C ${srcdir}" )
+	local exec=("make" "-C ${srcdir}")
 
-	[[ -z ${command} ]] && return 1;
+	[[ -z ${cmd} ]] && return 1
 
 	if [[ -n ${outdir} ]]; then
-		exec+=( "O=${outdir}" );
+		exec+=("O=${outdir}")
 	fi
 
-	[[ ${command} == *"menuconfig"* ]] && _BUILD_VERBOSE=true;
+	[[ ${cmd} == *"menuconfig"* ]] && _BUILD_VERBOSE=true
 
-	exec+=( "${args['build_option']}"
-			"${_BUILD_OPTION}"
-			"${command}"
-			"${_BUILD_JOBS}" )
+	exec+=("${args['build_option']}" "${_BUILD_OPTION}" "${cmd}" "${_BUILD_JOBS}")
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_linux_clean () {
+function bs_linux_clean() {
 	declare -n args="${1}"
-	local exec=( "make" "-C ${args['source_directory']}" )
+	local exec=("make" "-C ${args['source_directory']}")
 
-	[[ -n ${args['build_directory']} ]] && exec+=( "O=${args['build_directory']}" );
+	[[ -n ${args['build_directory']} ]] && exec+=("O=${args['build_directory']}")
 
-	exec+=( "${args['build_option']}" "clean" )
+	exec+=("${args['build_option']}" "${_BUILD_OPTION}" "clean")
 
 	bs_exec "${exec[*]}"
 
 	return ${?}
 }
 
-function bs_builder_assign () {
+function bs_builder_assign() {
 	declare -n t="${1}"
 
-	[[ -n ${t['builder']} ]] && return;
+	[[ -n ${t['builder']} ]] && return
 
 	for l in "${BS_BUILDER_LISTS[@]}"; do
 		declare -n list=${l}
-		if [[ ${t['build_type']} == ${list['type']} ]]; then
-			t['builder']=${l};
+		if [[ ${t['build_type']} == "${list['type']}" ]]; then
+			t['builder']=${l}
 			break
 		fi
 	done
 }
 
-function bs_script_get () {
-	if [[ ! -f ${BS_SCRIPT_CFG} ]]; then
-		logerr " Not found ${BS_SCRIPT_CFG}"
-		return -1;
+function bs_project_load() {
+	local val
+
+	if [[ ! -f ${BS_PROJECT_CFG} ]]; then
+		logerr " Not found ${BS_PROJECT_CFG}"
+		return 1
 	fi
 
-	local val=$(sed -n '/^\<CONFIG\>/p' "${BS_SCRIPT_CFG}");
+	val=$(sed -n '/^\<CONFIG\>/p' "${BS_PROJECT_CFG}")
 	val=$(echo "${val}" | cut -d'=' -f 2)
+	BS_PROJECT_SH="${val//[[:space:]]/}"
 
-	BS_SCRIPT=$(echo "${val}" | sed 's/[[:space:]]//g')
-	if [[ ! -f ${BS_SCRIPT} ]]; then
-		logerr "Not found script : ${BS_SCRIPT}"
-		return -1;
+	if [[ ! -f ${BS_PROJECT_SH} ]]; then
+		logerr "Not found project : ${BS_PROJECT_SH}"
+		return 1
 	fi
 
-	return 0;
+	return 0
 }
 
-function bs_script_set () {
-	local script=${1}
+function bs_project_save() {
+	local project=${1}
 
-	if [[ -z ${script}  || ! -f ${script} ]]; then
-		logerr " Invalid script : ${script}"
-		return -1;
+	if [[ -z ${project} || ! -f ${project} ]]; then
+		logerr " Invalid project : ${project}"
+		return 1
 	fi
 
-	script=$(realpath ${script})
-	logmsg " UPDATE\t: ${script} [${BS_SCRIPT_CFG}]"
+	project=$(realpath "${project}")
+	logmsg " UPDATE\t: ${project} [${BS_PROJECT_CFG}]"
 
-	# save script config
-cat > "${BS_SCRIPT_CFG}" <<EOF
-CONFIG = ${script}
+	# save project config
+	cat >"${BS_PROJECT_CFG}" <<EOF
+CONFIG = ${project}
 EOF
-	return 0;
+	return 0
 }
 
-function bs_script_show () {
+function bs_project_show() {
 	for t in "${BS_TARGETS[@]}"; do
-		bs_builder_assign ${t}
+		bs_builder_assign "${t}"
 
 		declare -n target=${t}
 		declare -n builder=${target['builder']}
-		local -a order=( ${builder['order']} )
+		declare -n order=builder['order']
 
-		logmsg "${target['target_name']}";
-		logmsg " - images\t: ${target['build_images']}";
-		logmsg " - order\t: ${order[*]}";
+		logmsg "${target['target_name']}"
+		logmsg " - images\t: ${target['build_images']}"
+		logmsg " - order\t: ${order}"
 	done
 }
 
-function bs_script_edit () {
-	${BS_EDITOR} "${BS_SCRIPT}"
+function bs_project_edit() {
+	${BS_EDITOR} "${BS_PROJECT_SH}"
 }
 
-function bs_menuconfig () {
-	local path=${BS_SCRIPT_DIR}
-	local -a prog_lits entry
-	local project
+function bs_menuconfig() {
+	local path=${BS_PROJECT_DIR}
+	local -a plist entry
+	local array project
 
-	# get script lists
-	IFS=$'\n'
-	local array=($(find ${path} -type f -name "*${BS_SCRIPT_EXTEN}"))
-	unset IFS
-	for i in ${array[*]}; do
-		prog_lits+=( ${i} )
+	# get project lists
+	array=$(find "${path}" -type f -name "*.${BS_PROJECT_EXTEN}")
+	for i in ${array}; do
+		plist+=("${i}")
 	done
 
 	# get porject menu lists
-	for i in ${prog_lits[*]}; do
+	for i in "${plist[@]}"; do
 		stat="OFF"
-		entry+=( "$(basename "${i}")" )
-		entry+=( " " )
-		[[ ${i} == "${BS_SCRIPT}" ]] && stat="ON";
-		entry+=( "${stat}" )
+		entry+=("$(basename "${i}")")
+		entry+=(" ")
+		[[ ${i} == "${BS_PROJECT_SH}" ]] && stat="ON"
+		entry+=("${stat}")
 	done
 
-	if [[ -z ${entry} ]]; then
-		logerr " Not found build scripts in ${path}"
-		exit 1;
+	if [[ -z ${entry[*]} ]]; then
+		logerr " Not found build projects in ${path}"
+		exit 1
 	fi
 
-	if ! which whiptail > /dev/null 2>&1; then
+	if ! which whiptail >/dev/null 2>&1; then
 		logext " Please install the whiptail"
 	fi
 
-	project=$(whiptail --title "Target script" \
-		--radiolist "Select build script : ${BS_SCRIPT_DIR}" 0 50 ${#entry[@]} -- "${entry[@]}" \
+	project=$(whiptail --title "Target project" \
+		--radiolist "Select build project : ${BS_PROJECT_DIR}" 0 50 ${#entry[@]} -- "${entry[@]}" \
 		3>&1 1>&2 2>&3)
-	[[ -z ${project} ]] && exit 1;
+	[[ -z ${project} ]] && exit 1
 
-	BS_SCRIPT="${BS_SCRIPT_DIR}/${project}"
+	BS_PROJECT_SH="${BS_PROJECT_DIR}/${project}"
 	if ! (whiptail --title "Save/Exit" --yesno "Save" 8 78); then
-		exit 1;
+		exit 1
 	fi
 
-	bs_script_set "${BS_SCRIPT}"
+	bs_project_save "${BS_PROJECT_SH}"
 }
 
-function bs_usage () {
+function bs_usage() {
 	echo " Usage:"
 	echo -e "\t$(basename "${0}") <option>"
 	echo ""
 	echo " option:"
-	echo -e  "\t-m \t select script with menuconfig"
-	echo -e  "\t-s [script]\t set build script."
-	echo -e  "\t-t [target]\t set build script's target."
-	echo -e  "\t-i [image]\t set build target's image."
-	echo -e  "\t-c [command]\t run commands supported by target."
-	echo -e  "\t-o [option]\t add option to build or config."
-	echo -e  "\t-j [jobs]\t set build jobs"
-	echo -e  "\t-l\t\t show build targets in script"
-	echo -e  "\t-e\t\t edit build script : ${BS_SCRIPT}"
-	echo -e  "\t-v\t\t build verbose"
+	echo -e "\t-m \t\t menuconfig to select project"
+	echo -e "\t-p [project]\t set build project."
+	echo -e "\t-t [target]\t set build project's target."
+	echo -e "\t-i [image]\t select build target."
+	echo -e "\t-c [command]\t run commands supported by target."
+	echo -e "\t-o [option]\t add option to build,config,install (each step)."
+	echo -e "\t-f \t\t force build the next target even if a build error occurs"
+	echo -e "\t-j [jobs]\t set build jobs"
+	echo -e "\t-l\t\t listup targets in project"
+	echo -e "\t-e\t\t edit build project : ${BS_PROJECT_SH}"
+	echo -e "\t-v\t\t build verbose"
 	echo ""
 
 	echo " Build commands supported by target type :"
-	local -a builder_lists=( ${BS_BUILDER_LISTS[*]} )
-	for i in "${builder_lists[@]}"; do
+	for i in "${BS_BUILDER_LISTS[@]}"; do
 		declare -n t=${i}
-		echo -ne "\033[0;33m* ${t['build_type']}\t| \033[0m";
+		echo -ne "\033[0;33m* ${t['type']}\t| commands : \033[0m"
 		for n in "${!t[@]}"; do
-			[[ ${n} == "type" ]] && continue;
-			[[ ${n} == "name" ]] && continue;
-			[[ ${n} == "order" ]] && continue;
-			[[ ${n} == "command" ]] && continue;
-			echo -ne "\033[0;33m${n} \033[0m";
+			[[ ${n} == "type" ]] && continue
+			[[ ${n} == "name" ]] && continue
+			[[ ${n} == "order" ]] && continue
+			[[ ${n} == "command" ]] && continue
+			echo -ne "\033[0;33m${n} \033[0m"
 		done
-		echo -ne "\033[0;33m'misc command' \033[0m";
+		echo -ne "\033[0;33m'misc command' \033[0m"
+		echo ""
+		echo -ne "\033[0;33m* \t| order    : ${t['order']}\033[0m"
 		echo ""
 	done
 }
 
-function bs_build_args () {
-	local _bs_script=''
+function bs_build_args() {
+	local _bs_project=''
 	local _bs_info=false _bs_edit=false
 
-	bs_script_get
+	bs_project_load
 
-	while getopts "ms:t:i:c:o:j:levh" opt; do
-	case ${opt} in
-		m ) bs_menuconfig; exit 0;;
-		s )	_bs_script="${OPTARG}";;
-		t )	_BUILD_TARGET="${OPTARG}";;
-		i )	_BUILD_IMAGE="${OPTARG}";;
-		c )	_BUILD_COMMAND=${OPTARG};;
-		l )	_bs_info=true;;
-		o )	_BUILD_OPTION="${OPTARG}";;
-		j ) _BUILD_JOBS="-j${OPTARG}";;
-		e )	_bs_edit=true;;
-		v )	_BUILD_VERBOSE=true;;
-		h )	bs_usage; exit 0;;
-		*)	exit 1;;
-	esac
+	while getopts "mp:t:i:c:o:j:flevh" opt; do
+		case ${opt} in
+		m)
+			bs_menuconfig
+			exit 0
+			;;
+		p) _bs_project="${OPTARG}" ;;
+		t) _BUILD_TARGET="${OPTARG}" ;;
+		i) _BUILD_IMAGE="${OPTARG}" ;;
+		c) _BUILD_COMMAND=${OPTARG} ;;
+		l) _bs_info=true ;;
+		o) _BUILD_OPTION="${OPTARG}" ;;
+		f) _BUILD_FORCE=true ;;
+		j) _BUILD_JOBS="-j${OPTARG}" ;;
+		e) _bs_edit=true ;;
+		v) _BUILD_VERBOSE=true ;;
+		h)
+			bs_usage
+			exit 0
+			;;
+		*) exit 1 ;;
+		esac
 	done
 
-	if [[ -n ${_bs_script} ]]; then
-		! bs_script_set "${_bs_script}" && exit 1;
-		! bs_script_get && exit 1;
+	if [[ -n ${_bs_project} ]]; then
+		! bs_project_save "${_bs_project}" && exit 1
+		! bs_project_load && exit 1
 	fi
 
 	if [[ ${_bs_info} == true ]]; then
-		source "${BS_SCRIPT}"
-		bs_script_show;
-		exit 0;
+		# shellcheck disable=SC1090
+		source "${BS_PROJECT_SH}"
+		bs_project_show
+		exit 0
 	fi
 	if [[ ${_bs_edit} == true ]]; then
-		bs_script_edit;
-		exit 0;
+		bs_project_edit
+		exit 0
 	fi
 }
 
-function bs_build_check () {
+function bs_build_check() {
 	if [[ -z ${BS_TARGETS} ]]; then
-		logerr " None BS_TARGETS : ${BS_SCRIPT} !!!"
-		exit 1;
+		logerr " None BS_TARGETS : ${BS_PROJECT_SH} !!!"
+		exit 1
 	fi
 
 	# Check build target
@@ -693,22 +716,22 @@ function bs_build_check () {
 		local -a list
 		for i in "${BS_TARGETS[@]}"; do
 			declare -n target=${i}
-			list+=( "'${target['target_name']}'" )
-			if [[ ${target['target_name']} == ${_BUILD_TARGET} ]]; then
+			list+=("'${target['target_name']}'")
+			if [[ ${target['target_name']} == "${_BUILD_TARGET}" ]]; then
 				found=true
-				break;
+				break
 			fi
 		done
 		if [[ ${found} == false ]]; then
 			logerr " Error, unknown target : ${_BUILD_TARGET} [ ${list[*]} ]"
-			exit 1;
+			exit 1
 		fi
 	fi
 }
 
-function bs_build_run () {
-	for t in ${BS_TARGETS[@]}; do
-		bs_builder_assign ${t}
+function bs_build_run() {
+	for t in "${BS_TARGETS[@]}"; do
+		bs_builder_assign "${t}"
 
 		declare -n target="${t}"
 		declare -n builder=${target['builder']}
@@ -716,8 +739,8 @@ function bs_build_run () {
 		local command=${_BUILD_COMMAND}
 
 		if [[ -n ${_BUILD_TARGET} &&
-			  ${target['target_name']} != ${_BUILD_TARGET} ]]; then
-			continue;
+			${target['target_name']} != "${_BUILD_TARGET}" ]]; then
+			continue
 		fi
 
 		if [[ ! -d ${target['source_directory']} ]]; then
@@ -726,37 +749,40 @@ function bs_build_run () {
 		fi
 
 		if [[ -n ${command} ]]; then
-			if printf '%s\0' "${!builder[@]}" | grep -qwz ${command}; then
+			if printf '%s\0' "${!builder[@]}" | grep -E -qwz "(${command})"; then
 				func=${builder[${command}]}
 			else
 				func=${builder['command']}
 			fi
-			[[ -z ${func} ]] && logext " Not, implement command: '${command}'";
-	
+			[[ -z ${func} ]] && logext " Not, implement command: '${command}'"
+
 			printf "\033[1;32m %-10s : %-10s\033[0m\n" "${target['target_name']}" "${command}"
-			${func} target "${command}"
-			if [[ ${?} -ne 0 ]]; then
-				logext " Error, Set verbose(-v) to print error log !"
+			if ! ${func} target "${command}"; then
+				logext "-- Error, build verbose(-v) to print error log, build target --"
 			fi
 			status="done"
 		else
-			local -a order=( ${builder['order']} )
-			for c in ${order[*]}; do
+			declare -n order=builder['order']
+			for c in ${order}; do
 				func=${builder[${c}]}
 				if [[ -z ${func} ]]; then
 					logext " Not implement builder : '${c}'"
 				fi
 
-				if [[ ${c} == 'prepare'  && -z ${target['build_prepare']} ]] ||
-				   [[ ${c} == 'finalize' && -z ${target['build_finalize']} ]] ||
-				   [[ ${c} == 'complete' && -z ${target['install_complete']} ]]; then
-					continue;
+				if [[ ${c} == 'prepare' && -z ${target['build_prepare']} ]] ||
+					[[ ${c} == 'finalize' && -z ${target['build_finalize']} ]] ||
+					[[ ${c} == 'complete' && -z ${target['install_complete']} ]]; then
+					continue
 				fi
 
 				printf "\033[1;32m %-10s : %-10s\033[0m\n" "${target['target_name']}" "${c}"
-				${func} target "${c}"
-				if [[ ${?} -ne 0 ]]; then
-					logext " Error! Set verbose(-v) to print error log !"
+				if ! ${func} target "${c}"; then
+					logerr "-- Error, build verbose(-v) to print error log, build all --"
+					if [[ ${_BUILD_FORCE} == true ]]; then
+						logerr "-- Continue the build forcefully --"
+						continue
+					fi
+					exit 1
 				fi
 				status="done"
 				echo ""
@@ -764,8 +790,8 @@ function bs_build_run () {
 		fi
 
 		if [[ ${status} == "unknown" ]]; then
-			logerr " Not support command: '${c}' for '${target['target_name']}'\n"
-			bs_script_show
+			logerr "-- Not support command: '${c}' for '${target['target_name']}'\n"
+			bs_project_show
 		fi
 	done
 }
@@ -776,13 +802,14 @@ function bs_build_run () {
 
 bs_build_args "${@}"
 
-if [[ -z ${BS_SCRIPT} ]]; then
-	logerr " Not selected build script !!!"
-	exit 0;
+if [[ -z ${BS_PROJECT_SH} ]]; then
+	logerr " Not selected build project !!!"
+	exit 0
 fi
 
-logmsg " SCRIPT\t: source '${BS_SCRIPT}'\n"
-source "${BS_SCRIPT}"
+logmsg " PROJECT    : '${BS_PROJECT_SH}'\n"
+# shellcheck disable=SC1090
+source "${BS_PROJECT_SH}"
 
 bs_build_check
 bs_build_run
