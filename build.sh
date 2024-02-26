@@ -310,13 +310,13 @@ function bs_cmake_clean() {
 
 function bs_cmake_install() {
 	declare -n args="${1}"
-	local dstimg=args['install_images']
+	local -n dstimg=args['install_images']
 	local exec=("cmake" "--install ${args['build_directory']}")
 
 	# If the type is 'cmake' and 'install_images' is not empty,
-	# cmake builder will copyies 'install_images' files to 'result' directory
+	# cmake builder will copyies 'install_images' files to 'install_directory'
 	# with the name 'install'
-	if [[ ${dstimg} ]]; then
+	if [[ -n "${dstimg}" ]]; then
 		bs_generic_install "${1}"
 		return ${?}
 	fi
