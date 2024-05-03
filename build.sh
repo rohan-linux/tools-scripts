@@ -12,6 +12,7 @@
 #       ['build_config']="<build configuration >"   # required : if type is linux, specify defconfig
 #       ['build_option']="<build option>"           # required : build options
 #       ['build_images']="<build image>"            # optional : build target images, support multiple image with shell array
+#       ['build_function']="<shell build>"          # required : shell script function to support 'build_type':'shell'
 #       ['build_finalize']="<shell function>"       # optional : finalize build shell function (after build)
 #
 #       ['install_directory']="<install directory>" # optional : build image's install directory
@@ -22,6 +23,7 @@
 #                                                                      cmake system will install using the command
 #                                                                      cmake --install <build_directory> --prefix <install_directory>
 #       ['install_names']="<install renames>"       # optional : copies name to 'install_directory',
+#       ['install_function']="<shell build>"        # optional : shell script function to support 'build_type':'shell'
 #       ['install_complete']="<shell function>"     # optional : shell function (after install)
 #    )
 #
@@ -103,8 +105,27 @@ declare -A BS_SYSTEM_LINUX=(
 	['order']=${BS_SYSTEM_LINUX_ORDER[*]}
 )
 
+BS_SYSTEM_SHELL_ORDER=('prepare' 'build' 'finalize' 'install' 'complete')
+# shellcheck disable=SC2034
+declare -A BS_SYSTEM_SHELL=(
+	['type']="shell"
+	['build']=bs_shell_build
+	['command']=bs_shell_build
+	['install']=bs_shell_install
+	['prepare']=bs_generic_func
+	['finalize']=bs_generic_func
+	['complete']=bs_generic_func
+	['order']=${BS_SYSTEM_SHELL_ORDER[*]}
+)
+
 # system list
-BS_SYSTEM_LISTS=(BS_SYSTEM_CMAKE BS_SYSTEM_MESON BS_SYSTEM_MAKE BS_SYSTEM_LINUX)
+BS_SYSTEM_LISTS=(
+	BS_SYSTEM_CMAKE
+	BS_SYSTEM_MESON
+	BS_SYSTEM_MAKE
+	BS_SYSTEM_LINUX
+	BS_SYSTEM_SHELL
+)
 
 # options
 _build_target=""
@@ -613,6 +634,58 @@ function bs_linux_clean() {
 	return ${?}
 }
 
+function bs_shell_build() {
+	declare -n args="${1}"
+	local dir=${args['source_directory']} fn=${args['build_function']}
+
+	[[ -z ${fn} ]] && return 0
+
+	if [[ -d ${dir} ]]; then
+		pushd ${dir} >/dev/null 2>&1
+		logmsg " $ cd $(pwd)"
+		fn="./${fn}"
+	fi
+
+	if [[ $(type -t "${fn}") == "function" ]]; then
+		${fn} "${1} ${_build_command} ${_build_option}" "${type}"
+	else
+		bs_exec_sh "${fn} ${args['build_option']} ${_build_command} ${_build_option}"
+	fi
+
+	[[ -d ${dir} ]] && popd >/dev/null 2>&1
+
+	return ${?}
+}
+
+function bs_shell_install() {
+	declare -n args="${1}"
+	local dir=${args['source_directory']} fn=${args['install_function']}
+
+	if [[ -z ${fn} ]]; then
+		if [[ -n ${args['build_function']} ]]; then
+			fn=${args['build_function']}
+		else
+			return 0
+		fi
+	fi
+
+	if [[ -d ${dir} ]]; then
+		pushd ${dir} >/dev/null 2>&1
+		logmsg " $ cd $(pwd)"
+		fn="./${fn}"
+	fi
+
+	if [[ $(type -t "${fn}") == "function" ]]; then
+		${fn} "${1} ${_build_option}" "${type}"
+	else
+		bs_exec_sh "${fn} ${args['install_option']} ${_build_option}"
+	fi
+
+	[[ -d ${dir} ]] && popd >/dev/null 2>&1
+
+	return ${?}
+}
+
 function bs_system_assign() {
 	declare -n t="${1}"
 
@@ -847,7 +920,8 @@ function bs_build_run() {
 			continue
 		fi
 
-		if [[ ! -d ${target['source_directory']} ]]; then
+		if [[ ${target['build_type']} != 'shell' ]] &&
+			[[ ! -d ${target['source_directory']} ]]; then
 			logerr " Error! not found source : '${target['target_name']}', ${target['source_directory']} !"
 			continue
 		fi
