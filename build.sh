@@ -566,7 +566,7 @@ function bs_linux_build() {
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
 	local exec=("make" "-C ${srcdir}")
 
-	if [[ -n ${outdir} ]]; then
+	if [[ -n ${outdir} && $(realpath "${outdir}") != "$(realpath ${srcdir})" ]]; then
 		exec+=("O=${outdir}")
 	else
 		outdir=${srcdir}
