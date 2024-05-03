@@ -261,16 +261,16 @@ function bs_generic_delete() {
 
 function bs_generic_func() {
 	declare -n args="${1}"
-	local type="${2}" fn=""
+	local op="${2}" fn=""
 
-	[[ ${type} == "prepare" ]] && fn=${args['build_prepare']}
-	[[ ${type} == "finalize" ]] && fn=${args['build_finalize']}
-	[[ ${type} == "complete" ]] && fn=${args['install_complete']}
+	[[ ${op} == "prepare" ]] && fn=${args['build_prepare']}
+	[[ ${op} == "finalize" ]] && fn=${args['build_finalize']}
+	[[ ${op} == "complete" ]] && fn=${args['install_complete']}
 
 	[[ -z ${fn} ]] && return 0
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1}" "${type}"
+		${fn} "${1}" "${op}"
 	else
 		bs_exec_sh "${fn}"
 	fi
@@ -636,7 +636,7 @@ function bs_linux_clean() {
 
 function bs_shell_build() {
 	declare -n args="${1}"
-	local dir=${args['source_directory']} fn=${args['build_function']}
+	local op="${2}" dir=${args['source_directory']} fn=${args['build_function']}
 
 	[[ -z ${fn} ]] && return 0
 
@@ -647,7 +647,7 @@ function bs_shell_build() {
 	fi
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1} ${_build_command} ${_build_option}" "${type}"
+		${fn} "${1} ${_build_command} ${_build_option}" "${op}"
 	else
 		bs_exec_sh "${fn} ${args['build_option']} ${_build_command} ${_build_option}"
 	fi
@@ -659,7 +659,7 @@ function bs_shell_build() {
 
 function bs_shell_install() {
 	declare -n args="${1}"
-	local dir=${args['source_directory']} fn=${args['install_function']}
+	local op="${2}" dir=${args['source_directory']} fn=${args['install_function']}
 
 	if [[ -z ${fn} ]]; then
 		if [[ -n ${args['build_function']} ]]; then
@@ -676,7 +676,7 @@ function bs_shell_install() {
 	fi
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1} ${_build_option}" "${type}"
+		${fn} "${1} ${_build_option}" "${op}"
 	else
 		bs_exec_sh "${fn} ${args['install_option']} ${_build_option}"
 	fi
