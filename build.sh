@@ -290,6 +290,11 @@ function bs_cmake_config() {
 		"${args['build_config']}"
 		"${_build_option}")
 
+	# Reconfigue CMake
+	if [[ -d ${outdir} && -f ${outdir}/CMakeCache.txt ]]; then
+		exec+=("--fresh")
+	fi
+
 	bs_exec_sh "${exec[*]}"
 
 	return ${?}
