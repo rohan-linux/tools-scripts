@@ -25,6 +25,9 @@
 #       ['install_names']="<install renames>"       # optional : copies name to 'install_directory',
 #       ['install_function']="<shell build>"        # optional : shell script function to support 'build_type':'shell'
 #       ['install_complete']="<shell function>"     # optional : shell function (after install)
+#
+#       ['clean_function']="<shell build>"          # optional : shell script function to support 'build_type':'shell'
+#       ['clean_option']="<install option>"         # optional : clean options
 #    )
 #
 
@@ -45,15 +48,15 @@ BS_SYSTEM_CMAKE_ORDER=('prepare' 'config' 'build' 'finalize' 'install' 'complete
 # shellcheck disable=SC2034
 declare -A BS_SYSTEM_CMAKE=(
 	['type']="cmake"
+	['prepare']=bs_func_shell
 	['config']=bs_cmake_config
 	['build']=bs_cmake_build
-	['command']=bs_cmake_command
-	['clean']=bs_cmake_clean
-	['delete']=bs_generic_delete
+	['finalize']=bs_func_shell
 	['install']=bs_cmake_install
-	['prepare']=bs_generic_func
-	['finalize']=bs_generic_func
-	['complete']=bs_generic_func
+	['complete']=bs_func_shell
+	['clean']=bs_cmake_clean
+	['delete']=bs_remove_delete
+	['command']=bs_cmake_command
 	['order']=${BS_SYSTEM_CMAKE_ORDER[*]}
 )
 
@@ -61,15 +64,15 @@ BS_SYSTEM_MESON_ORDER=('prepare' 'config' 'build' 'finalize' 'install' 'complete
 # shellcheck disable=SC2034
 declare -A BS_SYSTEM_MESON=(
 	['type']="meson"
+	['prepare']=bs_func_shell
 	['config']=bs_meson_setup
 	['build']=bs_meson_build
-	['command']=bs_meson_command
-	['clean']=bs_meson_clean
-	['delete']=bs_generic_delete
+	['finalize']=bs_func_shell
 	['install']=bs_meson_install
-	['prepare']=bs_generic_func
-	['finalize']=bs_generic_func
-	['complete']=bs_generic_func
+	['complete']=bs_func_shell
+	['clean']=bs_meson_clean
+	['delete']=bs_remove_delete
+	['command']=bs_meson_command
 	['order']=${BS_SYSTEM_MESON_ORDER[*]}
 )
 
@@ -77,14 +80,14 @@ BS_SYSTEM_MAKE_ORDER=('prepare' 'build' 'finalize' 'install' 'complete')
 # shellcheck disable=SC2034
 declare -A BS_SYSTEM_MAKE=(
 	['type']="make"
+	['prepare']=bs_func_shell
 	['build']=bs_make_build
-	['command']=bs_make_command
+	['finalize']=bs_func_shell
+	['install']=bs_copy_install
+	['complete']=bs_func_shell
 	['clean']=bs_make_clean
-	['delete']=bs_generic_delete
-	['install']=bs_generic_install
-	['prepare']=bs_generic_func
-	['finalize']=bs_generic_func
-	['complete']=bs_generic_func
+	['delete']=bs_remove_delete
+	['command']=bs_make_command
 	['order']=${BS_SYSTEM_MAKE_ORDER[*]}
 )
 
@@ -92,16 +95,16 @@ BS_SYSTEM_LINUX_ORDER=('prepare' 'defconfig' 'build' 'finalize' 'install' 'compl
 # shellcheck disable=SC2034
 declare -A BS_SYSTEM_LINUX=(
 	['type']="linux"
+	['prepare']=bs_func_shell
 	['defconfig']=bs_linux_defconfig
 	['menuconfig']=bs_linux_menuconfig
 	['build']=bs_linux_build
-	['command']=bs_linux_command
+	['finalize']=bs_func_shell
+	['install']=bs_copy_install
+	['complete']=bs_func_shell
 	['clean']=bs_linux_clean
-	['delete']=bs_generic_delete
-	['install']=bs_generic_install
-	['prepare']=bs_generic_func
-	['finalize']=bs_generic_func
-	['complete']=bs_generic_func
+	['delete']=bs_remove_delete
+	['command']=bs_linux_command
 	['order']=${BS_SYSTEM_LINUX_ORDER[*]}
 )
 
@@ -110,11 +113,13 @@ BS_SYSTEM_SHELL_ORDER=('prepare' 'build' 'finalize' 'install' 'complete')
 declare -A BS_SYSTEM_SHELL=(
 	['type']="shell"
 	['build']=bs_shell_build
-	['command']=bs_shell_build
+	['clean']=bs_shell_clean
+	['delete']=bs_remove_delete
 	['install']=bs_shell_install
-	['prepare']=bs_generic_func
-	['finalize']=bs_generic_func
-	['complete']=bs_generic_func
+	['prepare']=bs_func_shell
+	['finalize']=bs_func_shell
+	['complete']=bs_func_shell
+	['command']=bs_shell_build
 	['order']=${BS_SYSTEM_SHELL_ORDER[*]}
 )
 
@@ -195,7 +200,7 @@ function bs_exec_sh() {
 	return ${err}
 }
 
-function bs_generic_install() {
+function bs_copy_install() {
 	declare -n args="${1}"
 	local dstdir=${args['install_directory']}
 	local dstimg=() dstname=()
@@ -246,7 +251,7 @@ function bs_generic_install() {
 	return "${err}"
 }
 
-function bs_generic_delete() {
+function bs_remove_delete() {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
 	local exec="rm -rf ${outdir}"
@@ -259,7 +264,7 @@ function bs_generic_delete() {
 	return ${?}
 }
 
-function bs_generic_func() {
+function bs_func_shell() {
 	declare -n args="${1}"
 	local op="${2}" fn=""
 
@@ -341,6 +346,7 @@ function bs_cmake_clean() {
 	declare -n args="${1}"
 	local exec=("cmake"
 		"--build ${args['build_directory']}"
+		"${args['clean_option']}"
 		"${_build_option}"
 		"--target clean")
 
@@ -360,7 +366,7 @@ function bs_cmake_install() {
 	# cmake system will copyies 'install_images' files to 'install_directory'
 	# with the name 'install'
 	if [[ -n "${dstimg}" ]]; then
-		bs_generic_install "${1}"
+		bs_copy_install "${1}"
 		return ${?}
 	fi
 
@@ -429,7 +435,9 @@ function bs_meson_clean() {
 
 	[[ -z ${outdir} ]] && outdir="${srcdir}/build"
 
-	exec=("meson" "compile" "--clean" -C "${outdir}" "${_build_option}")
+	exec=("meson" "compile" "--clean" -C "${outdir}"
+		"${args['clean_option']}"
+		"${_build_option}")
 
 	bs_exec_sh "${exec[*]} ${_build_jobs}"
 
@@ -446,7 +454,7 @@ function bs_meson_install() {
 	# meson system will copyies 'install_images' files to 'install directory'
 	# with the name 'install'
 	if [[ -n "${dstimg}" ]]; then
-		bs_generic_install "${1}"
+		bs_copy_install "${1}"
 		return ${?}
 	fi
 
@@ -510,7 +518,7 @@ function bs_make_command() {
 function bs_make_clean() {
 	declare -n args="${1}"
 	local exec=("make" "-C ${args['source_directory']}"
-		"${args['build_option']}" "${_build_option}" "clean")
+		"${args['clean_option']}" "${_build_option}" "clean")
 
 	bs_exec_sh "${exec[*]}"
 
@@ -632,7 +640,7 @@ function bs_linux_clean() {
 
 	[[ -n ${args['build_directory']} ]] && exec+=("O=${args['build_directory']}")
 
-	exec+=("${args['build_option']}" "${_build_option}" "clean")
+	exec+=("${args['clean_option']}" "${_build_option}" "clean")
 
 	bs_exec_sh "${exec[*]}"
 
@@ -662,6 +670,35 @@ function bs_shell_build() {
 	return ${?}
 }
 
+function bs_shell_clean() {
+	declare -n args="${1}"
+	local op="${2}" dir=${args['source_directory']} fn=${args['clean_function']}
+
+	if [[ -z ${fn} ]]; then
+		if [[ -n ${args['build_function']} ]]; then
+			fn=${args['build_function']}
+		else
+			return 0
+		fi
+	fi
+
+	if [[ $(type -t "${fn}") == "function" ]]; then
+		${fn} "${1}" "${op}" "${_build_option}"
+	else
+		if [[ -d ${dir} ]]; then
+			pushd ${dir} >/dev/null 2>&1
+			logmsg " $ cd $(pwd)"
+			fn="./${fn}"
+		fi
+
+		bs_exec_sh "${fn} ${args['clean_option']} ${_build_option}"
+
+		[[ -d ${dir} ]] && popd >/dev/null 2>&1
+	fi
+
+	return ${?}
+}
+
 function bs_shell_install() {
 	declare -n args="${1}"
 	local op="${2}" dir=${args['source_directory']} fn=${args['install_function']}
@@ -674,19 +711,19 @@ function bs_shell_install() {
 		fi
 	fi
 
-	if [[ -d ${dir} ]]; then
-		pushd ${dir} >/dev/null 2>&1
-		logmsg " $ cd $(pwd)"
-		fn="./${fn}"
-	fi
-
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1} ${_build_option}" "${op}"
+		${fn} "${1}" "${op}" "${_build_option}"
 	else
-		bs_exec_sh "${fn} ${args['install_option']} ${_build_option}"
-	fi
+		if [[ -d ${dir} ]]; then
+			pushd ${dir} >/dev/null 2>&1
+			logmsg " $ cd $(pwd)"
+			fn="./${fn}"
+		fi
 
-	[[ -d ${dir} ]] && popd >/dev/null 2>&1
+		bs_exec_sh "${fn} ${args['install_option']} ${_build_option}"
+
+		[[ -d ${dir} ]] && popd >/dev/null 2>&1
+	fi
 
 	return ${?}
 }
