@@ -200,6 +200,28 @@ function bs_exec_sh() {
 	return ${err}
 }
 
+# return 1 if current version($2) is greater than or equal to min version($1)
+# else return 0
+function bs_version_compare() {
+	local min_v # ${1}
+	local cur_v # ${2}
+
+	[[ "$1" == "$2" ]] && return 0
+
+	mapfile -t -d. min_v <<<"$1"
+	mapfile -t -d. cur_v <<<"$2"
+
+	for ((i = 0; i < ${#min_v[*]}; i++)); do
+		if ((cur_v[i] > min_v[i])); then
+			return 0
+		elif ((cur_v[i] < min_v[i])); then
+			return 1
+		fi
+	done
+
+	return 0
+}
+
 function bs_copy_install() {
 	declare -n args="${1}"
 	local dstdir=${args['install_directory']}
@@ -297,7 +319,9 @@ function bs_cmake_config() {
 
 	# Reconfigue CMake
 	if [[ -d ${outdir} && -f ${outdir}/CMakeCache.txt ]]; then
-		exec+=("--fresh")
+		if bs_version_compare "3.24" "$(cmake --version | head -1 | cut -f3 -d" ")"; then
+			exec+=("--fresh")
+		fi
 	fi
 
 	bs_exec_sh "${exec[*]}"
