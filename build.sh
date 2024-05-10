@@ -36,10 +36,11 @@
 ###############################################################################
 eval "$(locale | sed -e 's/\(.*\)=.*/export \1=en_US.UTF-8/')"
 
-BS_CONFIG_DIR="$(pwd)/tools/project"
-BS_CONFIG_CFG="$(pwd)/.bs_config"
-BS_EXTETION='bs' # config file extention '*.bs'
-BS_CONFIG=""
+BS_PROJECT_PATH="$(pwd)/tools/project"
+BS_PROJECT_CONFIG="$(pwd)/.bs_project"
+BS_PROJECT_EXTN='bs' # project file extention '*.bs'
+BS_PROJECT=""
+BS_PROJECT_SELECT=""
 BS_EDITOR='vim' # editor with '-e' option
 
 ###############################################################################
@@ -123,7 +124,7 @@ declare -A BS_SYSTEM_SHELL=(
 	['order']=${BS_SYSTEM_SHELL_ORDER[*]}
 )
 
-# system list
+# build system list
 BS_SYSTEM_LISTS=(
 	BS_SYSTEM_CMAKE
 	BS_SYSTEM_MESON
@@ -140,6 +141,7 @@ _build_option=""
 _build_command=""
 _build_force=false
 _build_jobs="-j$(grep -c processor /proc/cpuinfo)"
+_project_lists=()
 
 function logerr() { echo -e "\033[1;31m$*\033[0m"; }
 function logmsg() { echo -e "\033[0;33m$*\033[0m"; }
@@ -766,51 +768,13 @@ function bs_system_assign() {
 	done
 }
 
-function bs_config_load() {
-	local val
-
-	if [[ ! -f ${BS_CONFIG_CFG} ]]; then
-		logerr " Not found ${BS_CONFIG_CFG}"
-		return 1
-	fi
-
-	val=$(sed -n '/^\<CONFIG\>/p' "${BS_CONFIG_CFG}")
-	val=$(echo "${val}" | cut -d'=' -f 2)
-	BS_CONFIG="${val//[[:space:]]/}"
-
-	if [[ ! -f ${BS_CONFIG} ]]; then
-		logerr "Not found config file: ${BS_CONFIG}"
-		return 1
-	fi
-
-	return 0
-}
-
-function bs_config_save() {
-	local config=${1}
-
-	if [[ -z ${config} || ! -f ${config} ]]; then
-		logerr " Invalid config file: ${config}"
-		return 1
-	fi
-
-	config=$(realpath "${config}")
-	logmsg " UPDATE     : ${config} [${BS_CONFIG_CFG}]"
-
-	# save config
-	cat >"${BS_CONFIG_CFG}" <<EOF
-CONFIG = ${config}
-EOF
-	return 0
-}
-
-function bs_config_show() {
+function bs_target_show() {
 	if [[ -z "${BS_TARGETS[*]}" ]]; then
-		logerr " Not defined 'BS_TARGETS' in ${BS_CONFIG} !!!"
+		logerr " Not defined 'BS_TARGETS' in ${BS_PROJECT} !!!"
 		exit 1
 	fi
 
-	logmsg " CONFIG     - ${BS_CONFIG}"
+	logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]\n"
 	for t in "${BS_TARGETS[@]}"; do
 		bs_system_assign "${t}"
 		declare -n target=${t}
@@ -819,32 +783,84 @@ function bs_config_show() {
 	done
 }
 
-function bs_config_edit() {
-	${BS_EDITOR} "${BS_CONFIG}"
+function bs_project_list() {
+	local path=${BS_PROJECT_PATH}
+	local array
+
+	# get project lists
+	array=$(find "${path}" -type f -name "*.${BS_PROJECT_EXTN}")
+	for i in ${array}; do
+		name=$(basename "${i}")
+		name=${name%.*}
+		_project_lists+=("${name}")
+	done
 }
 
-function bs_config_menu() {
-	local path=${BS_CONFIG_DIR}
-	local -a plist entry
-	local array config
+function bs_project_save() {
+	local project=${1}
 
-	# get config lists
-	array=$(find "${path}" -type f -name "*.${BS_EXTETION}")
-	for i in ${array}; do
-		plist+=("${i}")
-	done
+	BS_PROJECT_SELECT="${BS_PROJECT_PATH}/${project}.${BS_PROJECT_EXTN}"
+	if [[ -z ${project} || ! -f ${BS_PROJECT_SELECT} ]]; then
+		logerr " Invalid PROJECT: ${project}, not exist ${BS_PROJECT_SELECT}"
+		return 1
+	fi
+
+	logmsg " UPDATE     : ${project} [${BS_PROJECT_SELECT}] [${BS_PROJECT_CONFIG}]"
+
+	# save project
+	cat >"${BS_PROJECT_CONFIG}" <<EOF
+PROJECT_PATH = ${BS_PROJECT_PATH}
+PROJECT_SELECT = ${project}
+EOF
+	return 0
+}
+
+function bs_project_load() {
+	local val
+
+	if [[ ! -f ${BS_PROJECT_CONFIG} ]]; then
+		return 1
+	fi
+
+	val=$(sed -n '/^\<PROJECT_SELECT\>/p' "${BS_PROJECT_CONFIG}")
+	val=$(echo "${val}" | cut -d'=' -f 2)
+	BS_PROJECT="${val//[[:space:]]/}"
+	BS_PROJECT_SELECT="${BS_PROJECT_PATH}/${BS_PROJECT}.${BS_PROJECT_EXTN}"
+
+	if [[ ! -f "${BS_PROJECT_SELECT}" ]]; then
+		logerr " Not found PROJECT: ${BS_PROJECT_SELECT}"
+		return 1
+	fi
+
+	return 0
+}
+
+function bs_project_edit() {
+	${BS_EDITOR} "${BS_PROJECT_SELECT}"
+}
+
+function bs_project_menu() {
+	local path=${BS_PROJECT_PATH}
+	local -a plist entry
+	local project
+
+	# get project lists
+	if [[ -z ${_project_lists} ]]; then
+		bs_project_list
+		plist=(${_project_lists[*]})
+	fi
 
 	# get porject menu lists
 	for i in "${plist[@]}"; do
 		stat="OFF"
-		entry+=("$(basename "${i}")")
+		entry+=("${i}")
 		entry+=(" ")
-		[[ ${i} == "${BS_CONFIG}" ]] && stat="ON"
+		[[ ${i} == "${BS_PROJECT}" ]] && stat="ON"
 		entry+=("${stat}")
 	done
 
 	if [[ -z ${entry[*]} ]]; then
-		logerr " Not found build configs in ${path}"
+		logerr " Not found build project in ${path}"
 		exit 1
 	fi
 
@@ -852,17 +868,17 @@ function bs_config_menu() {
 		logext " Please install the whiptail"
 	fi
 
-	config=$(whiptail --title "Target CONFIG" \
-		--radiolist "Select IN : ${BS_CONFIG_DIR}" 0 50 ${#entry[@]} -- "${entry[@]}" \
+	project=$(whiptail --title "Target PROJECT" \
+		--radiolist "Select IN : ${BS_PROJECT_PATH}" 0 50 ${#entry[@]} -- "${entry[@]}" \
 		3>&1 1>&2 2>&3)
-	[[ -z ${config} ]] && exit 1
+	[[ -z ${project} ]] && exit 1
 
-	BS_CONFIG="${BS_CONFIG_DIR}/${config}"
+	BS_PROJECT="${project}"
 	if ! (whiptail --title "Save/Exit" --yesno "Save" 8 78); then
 		exit 1
 	fi
 
-	bs_config_save "${BS_CONFIG}"
+	bs_project_save "${BS_PROJECT}"
 }
 
 function bs_usage() {
@@ -870,16 +886,17 @@ function bs_usage() {
 	echo -e "\t$(basename "${0}") <option>"
 	echo ""
 	echo " option:"
-	echo -e "\t-m \t\t menuconfig to select config"
-	echo -e "\t-p [config]\t set build config."
-	echo -e "\t-t [target]\t set config's target."
+	echo -e "\t-m \t\t menuconfig to select project"
+	echo -e "\t-l\t\t listup projects at '${BS_PROJECT_PATH}'"
+	echo -e "\t-p [project]\t set build project."
+	echo -e "\t-t [target]\t set project's target."
 	echo -e "\t-i [image]\t select build target."
 	echo -e "\t-c [command]\t run commands supported by target."
 	echo -e "\t-o [option]\t add option to build,config,install (each step)."
 	echo -e "\t-f \t\t force build the next target even if a build error occurs"
 	echo -e "\t-j [jobs]\t set build jobs"
-	echo -e "\t-l\t\t listup targets in config"
-	echo -e "\t-e\t\t edit config : ${BS_CONFIG}"
+	echo -e "\t-s\t\t show '${BS_PROJECT}' targets"
+	echo -e "\t-e\t\t edit project: ${BS_PROJECT}"
 	echo -e "\t-v\t\t build verbose"
 	echo ""
 
@@ -902,22 +919,23 @@ function bs_usage() {
 }
 
 function bs_build_args() {
-	local listup=false edit=false
-	local config=''
+	local listup=false show=false edit=false
+	local project=''
 
-	bs_config_load
+	bs_project_load
 
-	while getopts "mp:t:i:c:o:j:flevh" opt; do
+	while getopts "mp:t:i:c:o:j:flsevh" opt; do
 		case ${opt} in
 		m)
-			bs_config_menu
+			bs_project_menu
 			exit 0
 			;;
-		p) config="${OPTARG}" ;;
+		p) project="${OPTARG}" ;;
+		l) listup=true ;;
 		t) _build_target="${OPTARG}" ;;
 		i) _build_image="${OPTARG}" ;;
 		c) _build_command=${OPTARG} ;;
-		l) listup=true ;;
+		s) show=true ;;
 		o) _build_option="${OPTARG}" ;;
 		f) _build_force=true ;;
 		j) _build_jobs="-j${OPTARG}" ;;
@@ -931,25 +949,36 @@ function bs_build_args() {
 		esac
 	done
 
-	if [[ -n ${config} ]]; then
-		! bs_config_save "${config}" && exit 1
-		! bs_config_load && exit 1
-	fi
 	if [[ ${listup} == true ]]; then
-		# shellcheck disable=SC1090
-		source "${BS_CONFIG}"
-		bs_config_show
+		bs_project_list
+		[[ -z ${_project_lists[@]} ]] && logext " Not Found PROJECTS : ${BS_PROJECT_PATH}"
+
+		logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]"
+		for i in "${_project_lists[@]}"; do logmsg "            - ${i}"; done
 		exit 0
 	fi
+
+	if [[ -n ${project} ]]; then
+		! bs_project_save "${project}" && exit 1
+		! bs_project_load && exit 1
+	fi
+
+	if [[ ${show} == true ]]; then
+		# shellcheck disable=SC1090
+		source "${BS_PROJECT_SELECT}"
+		bs_target_show
+		exit 0
+	fi
+
 	if [[ ${edit} == true ]]; then
-		bs_config_edit
+		bs_project_edit
 		exit 0
 	fi
 }
 
 function bs_build_check() {
 	if [[ -z "${BS_TARGETS[*]}" ]]; then
-		logerr " Not defined 'BS_TARGETS' in ${BS_CONFIG} !!!"
+		logerr " Not defined 'BS_TARGETS' in ${BS_PROJECT} !!!"
 		exit 1
 	fi
 
@@ -1036,7 +1065,7 @@ function bs_build_run() {
 
 		if [[ ${status} == "unknown" ]]; then
 			logerr "-- Not support command: '${c}' for '${target['target_name']}'\n"
-			bs_config_show
+			bs_target_show
 		fi
 	done
 }
@@ -1047,14 +1076,14 @@ function bs_build_run() {
 
 bs_build_args "${@}"
 
-if [[ -z ${BS_CONFIG} ]]; then
-	logerr " Not selected build CONFIG !!!"
+if [[ -z ${BS_PROJECT} ]]; then
+	logerr " Not selected build PROJECT !!!"
 	exit 0
 fi
 
-logmsg " CONFIG     : ${BS_CONFIG}\n"
+logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]\n"
 # shellcheck disable=SC1090
-source "${BS_CONFIG}"
+source "${BS_PROJECT_SELECT}"
 
 bs_build_check
 bs_build_run
