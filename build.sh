@@ -1,35 +1,5 @@
 #!/bin/bash
-#
-# CMAKE:
-#   declare -A BS_TARGET_ELEMENT=(
-#       ['target_name']="<name>"                    # required : build target name
-#       ['build_type']="cmake or make or linux"     # required : build type [cmake, meson, make, linux]
-#
-#       ['source_directory']="<source directory>"   # required : build source directory
-#
-#       ['build_directory']="<build directory>"     # optional : build output directory
-#       ['build_prepare']="<shell function>"        # optional : prepare build shell function (before config)
-#       ['build_config']="<build configuration >"   # required : if type is linux, specify defconfig
-#       ['build_option']="<build option>"           # required : build options
-#       ['build_images']="<build image>"            # optional : build target images, support multiple image with shell array
-#       ['build_function']="<shell build>"          # required : shell script function to support 'build_type':'shell'
-#       ['build_finalize']="<shell function>"       # optional : finalize build shell function (after build)
-#
-#       ['install_directory']="<install directory>" # optional : build image's install directory
-#       ['install_option']="<install option>"       # optional : install options
-#       ['install_images']="<output image>"         # optional : build output image names to install,
-#                                                   #            must be full path, support multiple image with shell array
-#                                                   #            NOTE. If the type is 'cmake' and 'install_images' is empty,
-#                                                                      cmake system will install using the command
-#                                                                      cmake --install <build_directory> --prefix <install_directory>
-#       ['install_names']="<install renames>"       # optional : copies name to 'install_directory',
-#       ['install_function']="<shell build>"        # optional : shell script function to support 'build_type':'shell'
-#       ['install_complete']="<shell function>"     # optional : shell function (after install)
-#
-#       ['clean_function']="<shell build>"          # optional : shell script function to support 'build_type':'shell'
-#       ['clean_option']="<clean option>"           # optional : clean options
-#    )
-#
+# Build Shell Script
 
 ###############################################################################
 # Set build shell script
@@ -605,7 +575,7 @@ function bs_linux_build() {
 	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
 	local exec=("make" "-C ${srcdir}")
 
-	if [[ -n ${outdir} && $(realpath "${outdir}") != "$(realpath ${srcdir})" ]]; then
+	if [[ -n ${outdir} && $(realpath "${outdir}") != "$(realpath "${srcdir}")" ]]; then
 		exec+=("O=${outdir}")
 	else
 		outdir=${srcdir}
@@ -683,7 +653,7 @@ function bs_shell_build() {
 		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
 		if [[ -d ${dir} ]]; then
-			pushd ${dir} >/dev/null 2>&1
+			pushd "${dir}" >/dev/null 2>&1
 			logmsg " $ cd $(pwd)"
 			fn="./${fn}"
 		fi
@@ -712,7 +682,7 @@ function bs_shell_clean() {
 		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
 		if [[ -d ${dir} ]]; then
-			pushd ${dir} >/dev/null 2>&1
+			pushd "${dir}" >/dev/null 2>&1
 			logmsg " $ cd $(pwd)"
 			fn="./${fn}"
 		fi
@@ -741,7 +711,7 @@ function bs_shell_install() {
 		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
 		if [[ -d ${dir} ]]; then
-			pushd ${dir} >/dev/null 2>&1
+			pushd "${dir}" >/dev/null 2>&1
 			logmsg " $ cd $(pwd)"
 			fn="./${fn}"
 		fi
@@ -840,18 +810,14 @@ function bs_project_edit() {
 }
 
 function bs_project_menu() {
-	local path=${BS_PROJECT_PATH}
-	local -a plist entry
-	local project
+	local path=${BS_PROJECT_PATH} project
+	local -a entry
 
 	# get project lists
-	if [[ -z ${_project_lists} ]]; then
-		bs_project_list
-		plist=(${_project_lists[*]})
-	fi
+	[[ -z ${_project_lists[*]} ]] && bs_project_list
 
 	# get porject menu lists
-	for i in "${plist[@]}"; do
+	for i in "${_project_lists[@]}"; do
 		stat="OFF"
 		entry+=("${i}")
 		entry+=(" ")
@@ -881,7 +847,75 @@ function bs_project_menu() {
 	bs_project_save "${BS_PROJECT}"
 }
 
+function bs_usage_format() {
+	echo -e " FORMAT: Target elements\n"
+	echo -e " declare -A <TARGET>=("
+	echo -e "\t['target_name']=<name>       - build target name, required"
+	echo -e "\t['build_type']=<type>        - build sytem type [cmake|meson|make|linux|shell], required"
+	echo -e ""
+	echo -e "\t['source_directory']=<dir>   - build source path, required [cmake|meson|make|linux]"
+
+	echo -e "\t['build_directory']=<dir>    - build output path, optional"
+	echo -e "\t['build_prepare']=<shell>    - shell function or script for 'build', this shell is runs before 'config', optional"
+	echo -e "\t['build_config']=<config>    - config options, required [linux] - specify defconfig"
+	echo -e "\t['build_option']=<option>    - options for 'config', 'build', and 'install' commands, optional"
+	echo -e "\t['build_images']=<image>     - target images for 'build', optional"
+	echo -e "\t['build_function']=<shell>   - shell function or script for 'build', required [shell]"
+	echo -e "\t['build_finalize']=<shell>   - shell function or script for 'build', this shell is runs after 'build', optional"
+	echo -e ""
+
+	echo -e "\t['install_directory']=<dir>  - build image's install directory, optional"
+	echo -e "\t['install_option']=<option>  - options for 'install', optional"
+	echo -e "\t['install_images']=<image>   - image name for 'install', must be full path."
+	echo -e "\t                               NOTE. If the type is 'cmake' and 'install_images' is empty,"
+	echo -e "\t                                     cmake system will install using the command"
+	echo -e "\t                                     cmake --install <build_directory> --prefix <install_directory>"
+	echo -e "\t['install_names']=<names>    - rename when copying 'install_images' to 'install_directory', optional"
+	echo -e "\t['install_function']=<shell> - shell function or script for 'install', required [shell]"
+	echo -e "\t['install_complete']=<shell> - shell function or script for 'build', this shell is runs after 'install', optional"
+	echo -e ""
+
+	echo -e "\t['clean_function']=<shell>   - shell function or script for 'clean', required [shell]"
+	echo -e "\t['clean_option']=<option>    - options for 'clean', optional"
+	echo -e "\t)"
+	echo -e ""
+	echo -e " BS_TARGETS=( <TARGET> ... )"
+	echo -e "\t'BS_TARGETS' is reserved"
+	echo -e ""
+}
+
+function bs_usage_cmds() {
+	echo -e " Commands supported by build-system :\n"
+	for i in "${BS_SYSTEM_LISTS[@]}"; do
+		declare -n t=${i}
+		echo -ne "* ${t['type']}\t| commands : "
+		for n in "${!t[@]}"; do
+			[[ ${n} == "type" ]] && continue
+			[[ ${n} == "name" ]] && continue
+			[[ ${n} == "order" ]] && continue
+			[[ ${n} == "command" ]] && continue
+			echo -ne "${n} "
+		done
+		echo -ne "... "
+		echo ""
+		echo -ne "* \t| order    : ${t['order']}"
+		echo ""
+	done
+}
+
 function bs_usage() {
+	case ${1} in
+	'fmt')
+		bs_usage_format
+		exit 0
+		;;
+	'cmd')
+		bs_usage_cmds
+		exit 0
+		;;
+	*) ;;
+	esac
+
 	echo " Usage:"
 	echo -e "\t$(basename "${0}") <option>"
 	echo ""
@@ -898,24 +932,8 @@ function bs_usage() {
 	echo -e "\t-s\t\t show '${BS_PROJECT}' targets"
 	echo -e "\t-e\t\t edit project '${BS_PROJECT}'"
 	echo -e "\t-v\t\t verbose"
+	echo -e "\t-h\t\t show help [fmt|cmd]"
 	echo ""
-
-	echo " Commands supported by build-system :"
-	for i in "${BS_SYSTEM_LISTS[@]}"; do
-		declare -n t=${i}
-		echo -ne "\033[0;33m* ${t['type']}\t| commands : \033[0m"
-		for n in "${!t[@]}"; do
-			[[ ${n} == "type" ]] && continue
-			[[ ${n} == "name" ]] && continue
-			[[ ${n} == "order" ]] && continue
-			[[ ${n} == "command" ]] && continue
-			echo -ne "\033[0;33m${n} \033[0m"
-		done
-		echo -ne "\033[0;33m'target's command' \033[0m"
-		echo ""
-		echo -ne "\033[0;33m* \t| order    : ${t['order']}\033[0m"
-		echo ""
-	done
 }
 
 function bs_build_args() {
@@ -942,7 +960,7 @@ function bs_build_args() {
 		e) edit=true ;;
 		v) _build_verbose=true ;;
 		h)
-			bs_usage
+			bs_usage "$(eval "echo \${$OPTIND}")"
 			exit 0
 			;;
 		*) exit 1 ;;
@@ -951,7 +969,7 @@ function bs_build_args() {
 
 	if [[ ${listup} == true ]]; then
 		bs_project_list
-		[[ -z ${_project_lists[@]} ]] && logext " Not Found PROJECTS : ${BS_PROJECT_PATH}"
+		[[ -z ${_project_lists[*]} ]] && logext " Not Found PROJECTS : ${BS_PROJECT_PATH}"
 
 		logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]"
 		for i in "${_project_lists[@]}"; do logmsg "            - ${i}"; done
