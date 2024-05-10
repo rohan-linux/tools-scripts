@@ -27,7 +27,7 @@
 #       ['install_complete']="<shell function>"     # optional : shell function (after install)
 #
 #       ['clean_function']="<shell build>"          # optional : shell script function to support 'build_type':'shell'
-#       ['clean_option']="<install option>"         # optional : clean options
+#       ['clean_option']="<clean option>"           # optional : clean options
 #    )
 #
 
@@ -288,16 +288,16 @@ function bs_remove_delete() {
 
 function bs_func_shell() {
 	declare -n args="${1}"
-	local op="${2}" fn=""
+	local cmd="${2}" fn=""
 
-	[[ ${op} == "prepare" ]] && fn=${args['build_prepare']}
-	[[ ${op} == "finalize" ]] && fn=${args['build_finalize']}
-	[[ ${op} == "complete" ]] && fn=${args['install_complete']}
+	[[ ${cmd} == "prepare" ]] && fn=${args['build_prepare']}
+	[[ ${cmd} == "finalize" ]] && fn=${args['build_finalize']}
+	[[ ${cmd} == "complete" ]] && fn=${args['install_complete']}
 
 	[[ -z ${fn} ]] && return 0
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1}" "${op}"
+		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
 		bs_exec_sh "${fn}"
 	fi
@@ -673,30 +673,30 @@ function bs_linux_clean() {
 
 function bs_shell_build() {
 	declare -n args="${1}"
-	local op="${2}" dir=${args['source_directory']} fn=${args['build_function']}
+	local cmd="${2}" dir=${args['source_directory']} fn=${args['build_function']}
 
 	[[ -z ${fn} ]] && return 0
 
-	if [[ -d ${dir} ]]; then
-		pushd ${dir} >/dev/null 2>&1
-		logmsg " $ cd $(pwd)"
-		fn="./${fn}"
-	fi
-
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1} ${_build_command} ${_build_option}" "${op}"
+		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
-		bs_exec_sh "${fn} ${args['build_option']} ${_build_command} ${_build_option}"
-	fi
+		if [[ -d ${dir} ]]; then
+			pushd ${dir} >/dev/null 2>&1
+			logmsg " $ cd $(pwd)"
+			fn="./${fn}"
+		fi
 
-	[[ -d ${dir} ]] && popd >/dev/null 2>&1
+		bs_exec_sh "${fn} ${args['build_option']} ${_build_option}"
+
+		[[ -d ${dir} ]] && popd >/dev/null 2>&1
+	fi
 
 	return ${?}
 }
 
 function bs_shell_clean() {
 	declare -n args="${1}"
-	local op="${2}" dir=${args['source_directory']} fn=${args['clean_function']}
+	local cmd="${2}" dir=${args['source_directory']} fn=${args['clean_function']}
 
 	if [[ -z ${fn} ]]; then
 		if [[ -n ${args['build_function']} ]]; then
@@ -707,7 +707,7 @@ function bs_shell_clean() {
 	fi
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1}" "${op}" "${_build_option}"
+		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
 		if [[ -d ${dir} ]]; then
 			pushd ${dir} >/dev/null 2>&1
@@ -725,7 +725,7 @@ function bs_shell_clean() {
 
 function bs_shell_install() {
 	declare -n args="${1}"
-	local op="${2}" dir=${args['source_directory']} fn=${args['install_function']}
+	local cmd="${2}" dir=${args['source_directory']} fn=${args['install_function']}
 
 	if [[ -z ${fn} ]]; then
 		if [[ -n ${args['build_function']} ]]; then
@@ -736,7 +736,7 @@ function bs_shell_install() {
 	fi
 
 	if [[ $(type -t "${fn}") == "function" ]]; then
-		${fn} "${1}" "${op}" "${_build_option}"
+		${fn} "${1}" "${cmd}" "${_build_option}"
 	else
 		if [[ -d ${dir} ]]; then
 			pushd ${dir} >/dev/null 2>&1
