@@ -886,21 +886,21 @@ function bs_usage() {
 	echo -e "\t$(basename "${0}") <option>"
 	echo ""
 	echo " option:"
-	echo -e "\t-m \t\t menuconfig to select project"
+	echo -e "\t-m \t\t select project with menuconfig"
 	echo -e "\t-l\t\t listup projects at '${BS_PROJECT_PATH}'"
-	echo -e "\t-p [project]\t set build project."
-	echo -e "\t-t [target]\t set project's target."
-	echo -e "\t-i [image]\t select build target."
+	echo -e "\t-p [project]\t select project."
+	echo -e "\t-t [target]\t select project's target."
+	echo -e "\t-i [image]\t select target's image."
 	echo -e "\t-c [command]\t run commands supported by target."
-	echo -e "\t-o [option]\t add option to build,config,install (each step)."
+	echo -e "\t-o [option]\t add option to config, build, install."
 	echo -e "\t-f \t\t force build the next target even if a build error occurs"
 	echo -e "\t-j [jobs]\t set build jobs"
 	echo -e "\t-s\t\t show '${BS_PROJECT}' targets"
-	echo -e "\t-e\t\t edit project: ${BS_PROJECT}"
-	echo -e "\t-v\t\t build verbose"
+	echo -e "\t-e\t\t edit project '${BS_PROJECT}'"
+	echo -e "\t-v\t\t verbose"
 	echo ""
 
-	echo " Build commands supported by target type :"
+	echo " Commands supported by build-system :"
 	for i in "${BS_SYSTEM_LISTS[@]}"; do
 		declare -n t=${i}
 		echo -ne "\033[0;33m* ${t['type']}\t| commands : \033[0m"
@@ -911,7 +911,7 @@ function bs_usage() {
 			[[ ${n} == "command" ]] && continue
 			echo -ne "\033[0;33m${n} \033[0m"
 		done
-		echo -ne "\033[0;33m'misc command' \033[0m"
+		echo -ne "\033[0;33m'target's command' \033[0m"
 		echo ""
 		echo -ne "\033[0;33m* \t| order    : ${t['order']}\033[0m"
 		echo ""
