@@ -1,4 +1,5 @@
 #!/bin/bash
+# (c) 2024, rohan
 # Build Shell Script
 
 ###############################################################################
@@ -54,7 +55,7 @@ declare -A BS_SYSTEM_MAKE=(
 	['prepare']=bs_func_shell
 	['build']=bs_make_build
 	['finalize']=bs_func_shell
-	['install']=bs_copy_install
+	['install']=bs_make_install
 	['complete']=bs_func_shell
 	['clean']=bs_make_clean
 	['delete']=bs_remove_delete
@@ -464,6 +465,7 @@ function bs_meson_install() {
 
 	return ${?}
 }
+
 function bs_make_build() {
 	declare -n args="${1}"
 	local srcdir=${args['source_directory']}
@@ -515,6 +517,27 @@ function bs_make_clean() {
 	declare -n args="${1}"
 	local exec=("make" "-C ${args['source_directory']}"
 		"${args['clean_option']}" "${_build_option}" "clean")
+
+	bs_exec_sh "${exec[*]}"
+
+	return ${?}
+}
+
+function bs_make_install() {
+	declare -n args="${1}"
+	local srcdir=${args['source_directory']} outdir=${args['build_directory']}
+	local -n dstimg=args['install_images']
+	local exec=("make" "install")
+
+	# If the type is 'make' and 'install_images' is not empty,
+	# make system will copyies 'install_images' files to 'install directory'
+	# with the name 'install'
+	if [[ -n "${dstimg}" ]]; then
+		bs_copy_install "${1}"
+		return ${?}
+	fi
+
+	exec+=("-C ${outdir}" "${args['install_option']}" "${_build_option}")
 
 	bs_exec_sh "${exec[*]}"
 
