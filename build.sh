@@ -888,6 +888,7 @@ function bs_project_menu() {
 function bs_usage_format() {
 	echo -e " FORMAT: Target elements\n"
 	echo -e " declare -A <TARGET>=("
+	echo -e "\t['build_manual']=<name>      - build manually, [true|false] default false"
 	echo -e "\t['target_name']=<name>       - build target name, required"
 	echo -e "\t['build_type']=<type>        - build sytem type [cmake|meson|make|linux|shell], required"
 	echo -e ""
@@ -1092,6 +1093,11 @@ function bs_build_run() {
 			status="done"
 		else
 			printf "\033[1;32m ***** [ %s ] *****\033[0m\n" "${target['target_name']}"
+			if [[ ${target['build_manual']} == true && -z ${_build_target} ]]; then
+				logmsg " - Build manually ..."
+				continue
+			fi
+
 			declare -n order=system['order']
 			for c in ${order}; do
 				func=${system[${c}]}
@@ -1099,7 +1105,7 @@ function bs_build_run() {
 					logext " Not implement system : '${c}'"
 				fi
 
-				if [[ ${c} == 'prepare' && -z ${target['build_prepare']} ]] ||
+				if [[ ${c} == 'prepare'  && -z ${target['build_prepare']} ]] ||
 				   [[ ${c} == 'finalize' && -z ${target['build_finalize']} ]] ||
 				   [[ ${c} == 'complete' && -z ${target['install_complete']} ]]; then
 					continue
