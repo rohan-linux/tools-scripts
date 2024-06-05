@@ -1088,7 +1088,7 @@ function bs_build_run() {
 			fi
 			ret="done"
 		else
-			printf "\033[1;32m ***** [ %s ] *****\033[0m\n" "${target['target_name']}"
+			printf "\033[1;32m ********** [ %s ] **********\033[0m\n" "${target['target_name']}"
 			if [[ ${target['build_manual']} == true && -z ${_build_target} ]]; then
 				logmsg " - Build manually ..."
 				continue
@@ -1110,7 +1110,7 @@ function bs_build_run() {
 
 				status['command']="${c}"
 
-				printf "\033[1;32m - %s\033[0m\n" "${status['command']}"
+				printf "\033[1;32m - run\t: %s\033[0m\n" "${status['command']}"
 				if ! ${func} target status; then
 					logerr "-- Error, build verbose(-v) to print error log, build all --"
 					if [[ ${_build_force} == true ]]; then
