@@ -231,6 +231,7 @@ function bs_copy_install() {
 			[[ -d "${dstdir}/$(basename "${dimg[$i]}")" ]]; then
 			bash -c "rm -rf ${dstdir}/$(basename "${dimg[$i]}")"
 		fi
+
 		exec="cp -a ${dimg[$i]} $(realpath "${dstdir}/${dstname[$i]}")"
 		if [[ ${_build_verbose} == true ]]; then
 			bash -c "${exec}"
@@ -310,9 +311,7 @@ function bs_cmake_build() {
 
 	[[ -z ${odir} ]] && odir="${args['source_directory']}/build"
 
-	exec=("cmake"
-		"--build ${odir}"
-		"${args['build_option']}" "${_build_option}")
+	exec=("cmake" "--build ${odir}"	"${args['build_option']}" "${_build_option}")
 
 	if [[ ${_build_image} ]]; then
 		exec+=("-t ${_build_image}")
@@ -341,11 +340,8 @@ function bs_cmake_command() {
 
 function bs_cmake_clean() {
 	declare -n args="${1}"
-	local exec=("cmake"
-		"--build ${args['build_directory']}"
-		"${args['clean_option']}"
-		"${_build_option}"
-		"--target clean")
+	local exec=("cmake"	"--build ${args['build_directory']}"
+		"${args['clean_option']}" "${_build_option}" "--target clean")
 
 	[[ -z ${args['build_directory']} ]] && return 1
 
@@ -367,7 +363,9 @@ function bs_cmake_install() {
 		return ${?}
 	fi
 
-	[[ -n ${args['install_directory']} ]] && exec+=("--prefix ${args['install_directory']}")
+	if [[ -n ${args['install_directory']} ]]; then
+		exec+=("--prefix ${args['install_directory']}")
+	fi
 
 	exec+=("${args['install_option']}" "${_build_option}")
 
@@ -384,7 +382,7 @@ function bs_meson_setup() {
 	[[ -z ${odir} ]] && odir="${sdir}/build"
 
 	local exec=("meson" "setup" "${args['build_config']}"
-		"${odir}" "${sdir}" "${_build_option}")
+				"${odir}" "${sdir}" "${_build_option}")
 
 	bs_exec_sh "${exec[*]}"
 
@@ -433,8 +431,7 @@ function bs_meson_clean() {
 	[[ -z ${odir} ]] && odir="${sdir}/build"
 
 	exec=("meson" "compile" "--clean" -C "${odir}"
-		"${args['clean_option']}"
-		"${_build_option}")
+		"${args['clean_option']}" "${_build_option}")
 
 	bs_exec_sh "${exec[*]} ${_build_jobs}"
 
@@ -458,7 +455,11 @@ function bs_meson_install() {
 	[[ -z ${odir} ]] && odir="${sdir}/build"
 
 	exec+=("-C ${odir}")
-	[[ -n ${args['install_directory']} ]] && exec+=("--destdir ${args['install_directory']}")
+
+	if [[ -n ${args['install_directory']} ]]; then
+		exec+=("--destdir ${args['install_directory']}")
+	fi
+
 	exec+=("${args['install_option']}" "${_build_option}")
 
 	bs_exec_sh "${exec[*]}"
@@ -470,9 +471,7 @@ function bs_make_build() {
 	declare -n args="${1}"
 	local sdir=${args['source_directory']}
 	declare -n oimg=args['build_images']
-	local exec=("make"
-		"-C ${sdir}"
-		"${args['build_option']}" "${_build_option}")
+	local exec=("make" "-C ${sdir}" "${args['build_option']}" "${_build_option}")
 
 	if [[ -n ${_build_image} ]]; then
 		bs_exec_sh "${exec[*]} ${_build_image} ${_build_jobs}"
@@ -498,9 +497,7 @@ function bs_make_command() {
 	declare -n args="${1}" stat="${2}"
 	local cmd=${stat['command']}
 	local sdir=${args['source_directory']}
-	local exec=("make"
-		"-C ${sdir}"
-		"${args['build_option']}" "${_build_option}")
+	local exec=("make" "-C ${sdir}"	"${args['build_option']}" "${_build_option}")
 
 	[[ -z ${cmd} ]] && return 1
 
@@ -556,7 +553,8 @@ function bs_linux_defconfig() {
 
 	[[ -z ${args['build_config']} ]] && return 0
 
-	if [[ -n ${odir} ]]; then
+	if [[ -n ${odir} ]] &&
+	   [[ $(realpath "${odir}") != "$(realpath "${sdir}")" ]]; then
 		exec+=("O=${odir}")
 	else
 		odir=${sdir}
@@ -579,17 +577,14 @@ function bs_linux_menuconfig() {
 	local sdir=${args['source_directory']} odir=${args['build_directory']}
 	local exec=("make" "-C ${sdir}")
 
-	if [[ -n ${odir} ]]; then
+	if [[ -n ${odir} ]] &&
+	   [[ $(realpath "${odir}") != "$(realpath "${sdir}")" ]]; then
 		exec+=("O=${odir}")
-	else
-		odir=${sdir}
 	fi
 
 	# check default config
-	if [[ ! -d "$(realpath "${odir}")" || ! -f "$(realpath "${odir}")/.config" ]]; then
-		if ! bs_linux_defconfig "${1}" "${2}"; then
-			return 1
-		fi
+	if ! bs_linux_defconfig "${1}" "${2}"; then
+		return 1
 	fi
 
 	exec+=("${args['build_option']}" "menuconfig")
@@ -605,17 +600,14 @@ function bs_linux_build() {
 	local sdir=${args['source_directory']} odir=${args['build_directory']}
 	local exec=("make" "-C ${sdir}")
 
-	if [[ -n ${odir} && $(realpath "${odir}") != "$(realpath "${sdir}")" ]]; then
+	if [[ -n ${odir} ]] &&
+	   [[ $(realpath "${odir}") != "$(realpath "${sdir}")" ]]; then
 		exec+=("O=${odir}")
-	else
-		odir=${sdir}
 	fi
 
 	# check default config
-	if [[ ! -d "$(realpath "${odir}")" || ! -f "$(realpath "${odir}")/.config" ]]; then
-		if ! bs_linux_defconfig "${1}" "${2}"; then
-			return 1
-		fi
+	if ! bs_linux_defconfig "${1}" "${2}"; then
+		return 1
 	fi
 
 	exec+=("${args['build_option']}" "${_build_option}")
@@ -647,7 +639,8 @@ function bs_linux_command() {
 
 	[[ -z ${cmd} ]] && return 1
 
-	if [[ -n ${odir} ]]; then
+	if [[ -n ${odir} ]] &&
+	   [[ $(realpath "${odir}") != "$(realpath "${sdir}")" ]]; then
 		exec+=("O=${odir}")
 	fi
 
@@ -662,9 +655,13 @@ function bs_linux_command() {
 
 function bs_linux_clean() {
 	declare -n args="${1}"
-	local exec=("make" "-C ${args['source_directory']}")
+	local sdir=${args['source_directory']} odir=${args['build_directory']}
+	local exec=("make" "-C ${sdir}")
 
-	[[ -n ${args['build_directory']} ]] && exec+=("O=${args['build_directory']}")
+	if [[ -n ${odir} ]] &&
+	   [[ $(realpath "${odir}") != "$(realpath "${sdir}")" ]]; then
+		exec+=("O=${odir}")
+	fi
 
 	exec+=("${args['clean_option']}" "${_build_option}" "clean")
 
