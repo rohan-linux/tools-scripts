@@ -29,7 +29,6 @@ declare -A BS_SYSTEM_CMAKE=(
 	['clean']=bs_cmake_clean
 	['delete']=bs_remove_delete
 	['command']=bs_cmake_command
-	['operation']=""
 	['order']=${BS_SYSTEM_CMAKE_ORDER[*]}
 )
 
@@ -46,7 +45,6 @@ declare -A BS_SYSTEM_MESON=(
 	['clean']=bs_meson_clean
 	['delete']=bs_remove_delete
 	['command']=bs_meson_command
-	['operation']=""
 	['order']=${BS_SYSTEM_MESON_ORDER[*]}
 )
 
@@ -62,7 +60,6 @@ declare -A BS_SYSTEM_MAKE=(
 	['clean']=bs_make_clean
 	['delete']=bs_remove_delete
 	['command']=bs_make_command
-	['operation']=""
 	['order']=${BS_SYSTEM_MAKE_ORDER[*]}
 )
 
@@ -80,7 +77,6 @@ declare -A BS_SYSTEM_LINUX=(
 	['clean']=bs_linux_clean
 	['delete']=bs_remove_delete
 	['command']=bs_linux_command
-	['operation']=""
 	['order']=${BS_SYSTEM_LINUX_ORDER[*]}
 )
 
@@ -96,7 +92,6 @@ declare -A BS_SYSTEM_SHELL=(
 	['finalize']=bs_func_shell
 	['complete']=bs_func_shell
 	['command']=bs_shell_build
-	['operation']=""
 	['order']=${BS_SYSTEM_SHELL_ORDER[*]}
 )
 
@@ -265,12 +260,12 @@ function bs_remove_delete() {
 }
 
 function bs_func_shell() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bsys['operation']} fn=""
+	declare -n args="${1}" stat="${2}"
+	local cmd=${stat['command']} fn=""
 
-	[[ ${op} == "prepare"  ]] && fn=${args['build_prepare']}
-	[[ ${op} == "finalize" ]] && fn=${args['build_finalize']}
-	[[ ${op} == "complete" ]] && fn=${args['install_complete']}
+	[[ ${cmd} == "prepare"  ]] && fn=${args['build_prepare']}
+	[[ ${cmd} == "finalize" ]] && fn=${args['build_finalize']}
+	[[ ${cmd} == "complete" ]] && fn=${args['install_complete']}
 
 	[[ -z ${fn} ]] && return 0
 
@@ -331,12 +326,12 @@ function bs_cmake_build() {
 }
 
 function bs_cmake_command() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bsys['operation']}
+	declare -n args="${1}" stat="${2}"
+	local cmd=${stat['command']}
 	local odir=${args['build_directory']}
-	local exec=("cmake" "--build ${odir}" "${_build_option}" "${op}")
+	local exec=("cmake" "--build ${odir}" "${_build_option}" "${cmd}")
 
-	[[ -z ${op} ]] && return 1
+	[[ -z ${cmd} ]] && return 1
 	[[ -z ${odir} ]] && odir="${args['source_directory']}/build"
 
 	bs_exec_sh "${exec[*]} ${_build_jobs}"
@@ -418,11 +413,11 @@ function bs_meson_build() {
 }
 
 function bs_meson_command() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bs['operation']}
-	local exec=("meson" "${op}" "${_build_option}")
+	declare -n args="${1}" stat="${2}"
+	local cmd=${bs['command']}
+	local exec=("meson" "${cmd}" "${_build_option}")
 
-	[[ -z ${op} ]] && return 1
+	[[ -z ${cmd} ]] && return 1
 
 	bs_exec_sh "${exec[*]}"
 
@@ -500,17 +495,17 @@ function bs_make_build() {
 }
 
 function bs_make_command() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bsys['operation']}
+	declare -n args="${1}" stat="${2}"
+	local cmd=${stat['command']}
 	local sdir=${args['source_directory']}
 	local exec=("make"
 		"-C ${sdir}"
 		"${args['build_option']}" "${_build_option}")
 
-	[[ -z ${op} ]] && return 1
+	[[ -z ${cmd} ]] && return 1
 
 	if [[ -n ${_build_image} ]]; then
-		bs_exec_sh "${exec[*]} ${_build_image} ${op} ${_build_jobs}"
+		bs_exec_sh "${exec[*]} ${_build_image} ${cmd} ${_build_jobs}"
 		return ${?}
 	fi
 
@@ -555,7 +550,7 @@ function bs_make_install() {
 }
 
 function bs_linux_defconfig() {
-	declare -n args="${1}" bsys="${2}"
+	declare -n args="${1}" stat="${2}"
 	local sdir=${args['source_directory']} odir=${args['build_directory']}
 	local exec=("make" "-C ${sdir}")
 
@@ -645,20 +640,20 @@ function bs_linux_build() {
 }
 
 function bs_linux_command() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bsys['operation']}
+	declare -n args="${1}" stat="${2}"
+	local cmd=${stat['command']}
 	local sdir=${args['source_directory']} odir=${args['build_directory']}
 	local exec=("make" "-C ${sdir}")
 
-	[[ -z ${op} ]] && return 1
+	[[ -z ${cmd} ]] && return 1
 
 	if [[ -n ${odir} ]]; then
 		exec+=("O=${odir}")
 	fi
 
-	[[ ${op} == *"menuconfig"* ]] && _build_verbose=true
+	[[ ${cmd} == *"menuconfig"* ]] && _build_verbose=true
 
-	exec+=("${args['build_option']}" "${_build_option}" "${op}" "${_build_jobs}")
+	exec+=("${args['build_option']}" "${_build_option}" "${cmd}" "${_build_jobs}")
 
 	bs_exec_sh "${exec[*]}"
 
@@ -679,8 +674,7 @@ function bs_linux_clean() {
 }
 
 function bs_shell_build() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bsys['operation']}
+	declare -n args="${1}"
 	local dir=${args['source_directory']} fn=${args['build_function']}
 
 	[[ -z ${fn} ]] && return 0
@@ -703,8 +697,7 @@ function bs_shell_build() {
 }
 
 function bs_shell_clean() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${bsys['operation']}
+	declare -n args="${1}"
 	local dir=${args['source_directory']} fn=${args['clean_function']}
 
 	if [[ -z ${fn} ]]; then
@@ -733,8 +726,7 @@ function bs_shell_clean() {
 }
 
 function bs_shell_install() {
-	declare -n args="${1}" bsys="${2}"
-	local op=${args['operation']}
+	declare -n args="${1}"
 	local dir=${args['source_directory']} fn=${args['install_function']}
 
 	if [[ -z ${fn} ]]; then
@@ -776,7 +768,7 @@ function bs_system_assign() {
 	done
 }
 
-function bs_target_show() {
+function bs_target_list() {
 	if [[ -z "${BS_PROJECT_TARGETS[*]}" ]]; then
 		logerr " Not defined 'BS_PROJECT_TARGETS' in ${BS_PROJECT} !!!"
 		exit 1
@@ -1021,7 +1013,7 @@ function bs_build_args() {
 	if [[ ${show} == true ]]; then
 		# shellcheck disable=SC1090
 		source "${BS_PROJECT_SELECT}"
-		bs_target_show
+		bs_target_list
 		exit 0
 	fi
 
@@ -1058,11 +1050,15 @@ function bs_build_check() {
 
 function bs_build_run() {
 	for t in "${BS_PROJECT_TARGETS[@]}"; do
+
+		# assign build system to the target['system']
 		bs_system_assign "${t}"
 
 		declare -n target="${t}"
 		declare -n system=${target['system']}
-		local status="unknown"
+		# target's build status
+		declare -A status=( ['command']="" )
+		local ret="unknown"
 		local cmd=${_build_command}
 
 		if [[ -n ${_build_target} &&
@@ -1084,13 +1080,13 @@ function bs_build_run() {
 			fi
 			[[ -z ${func} ]] && logext " Not, implement command: '${cmd}'"
 
-			system['operation']="${cmd}"
+			status['command']="${cmd}"
 
-			printf "\033[1;32m %-10s : %-10s\033[0m\n" "* ${target['target_name']}" "${system['operation']}"
-			if ! ${func} target system; then
+			printf "\033[1;32m %-10s : %-10s\033[0m\n" "* ${target['target_name']}" "${status['command']}"
+			if ! ${func} target status; then
 				logext "-- Error, build verbose(-v) to print error log, build target --"
 			fi
-			status="done"
+			ret="done"
 		else
 			printf "\033[1;32m ***** [ %s ] *****\033[0m\n" "${target['target_name']}"
 			if [[ ${target['build_manual']} == true && -z ${_build_target} ]]; then
@@ -1099,6 +1095,7 @@ function bs_build_run() {
 			fi
 
 			declare -n order=system['order']
+
 			for c in ${order}; do
 				func=${system[${c}]}
 				if [[ -z ${func} ]]; then
@@ -1111,10 +1108,10 @@ function bs_build_run() {
 					continue
 				fi
 
-				system['operation']="${c}"
+				status['command']="${c}"
 
-				printf "\033[1;32m - %s\033[0m\n" "${system['operation']}"
-				if ! ${func} target system; then
+				printf "\033[1;32m - %s\033[0m\n" "${status['command']}"
+				if ! ${func} target status; then
 					logerr "-- Error, build verbose(-v) to print error log, build all --"
 					if [[ ${_build_force} == true ]]; then
 						logerr "-- Continue the build forcefully --"
@@ -1122,14 +1119,14 @@ function bs_build_run() {
 					fi
 					exit 1
 				fi
-				status="done"
+				ret="done"
 				echo ""
 			done
 		fi
 
-		if [[ ${status} == "unknown" ]]; then
+		if [[ ${ret} == "unknown" ]]; then
 			logerr "-- Not support command: '${c}' for '${target['target_name']}'\n"
-			bs_target_show
+			bs_target_list
 		fi
 	done
 }
