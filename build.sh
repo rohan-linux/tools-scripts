@@ -412,7 +412,7 @@ function bs_meson_build() {
 
 function bs_meson_command() {
 	declare -n args="${1}" stat="${2}"
-	local cmd=${bs['command']}
+	local cmd=${stat['command']}
 	local exec=("meson" "${cmd}" "${_build_option}")
 
 	[[ -z ${cmd} ]] && return 1
