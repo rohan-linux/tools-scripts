@@ -1135,7 +1135,7 @@ function bs_build_run() {
 bs_build_args "${@}"
 
 if [[ -z ${BS_PROJECT} ]]; then
-	logerr " Not selected build PROJECT !!!"
+	logerr " Not Selected Project, PATH: ${BS_PROJECT_PATH}"
 	exit 0
 fi
 
