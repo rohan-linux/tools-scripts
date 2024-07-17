@@ -10,6 +10,7 @@ QEMU_MACHINE_EXTN='qemu' # machine file extention '*.bs'
 QEMU_MACHINE=""
 QEMU_MACHINE_SELECT=""
 QEMU_EDITOR='vim' # editor with '-e' option
+QEMU_GDB_PORT="1234"
 
 ###############################################################################
 QEMU_DEVICETREE="devicetree"
@@ -19,6 +20,9 @@ _qemu_machines=()
 _qemu_target=""
 _qemu_option=""
 _qemu_dumpdtb=false
+_qemu_print=false
+_qemu_console=false
+_qemu_gdb=false
 
 function logerr() { echo -e "\033[1;31m$*\033[0m"; }
 function logmsg() { echo -e "\033[0;33m$*\033[0m"; }
@@ -34,7 +38,12 @@ function qemu_exec_sh() {
 	exec="$(echo "${exec}" | sed 's/^[ \t]*//;s/[ \t]*$//;s/\s\s*/ /g')"
 
 	logmsg " $ ${exec}"
-	bash -c "${exec}"
+
+	if [[ ${_qemu_console} == true ]]; then
+		gnome-terminal -- bash -c "${exec}" &
+	else
+		bash -c "${exec}"
+	fi
 
 	return ${?}
 }
@@ -80,7 +89,7 @@ function qemu_stop_target() {
 		pid=$(pidof "${exec}")
 		if [[ ${pid} ]]; then
 			user=$(ps -o user= -p "${pid}")
-			echo "Kill ${exec} pid [${user}:${pid}]"
+			logmsg " Kill ${exec} pid [${user}:${pid}]"
 			[[ ${user} == root ]] && _sudo_=sudo
 			bash -c "${_sudo_} kill ${pid}"
 			if [[ ${QEMU_COMMAND_ARCH["graphic"]} != "-nographic" ]]; then
@@ -88,7 +97,7 @@ function qemu_stop_target() {
 				if [[ ${pid} ]]; then
 					user=$(ps -o user= -p "${pid}")
 					[[ $user == root ]] && _sudo_=sudo
-					echo "Kill vinagre pid [${user}:${pid}]"
+					logmsg " Kill vinagre pid [${user}:${pid}]"
 					bash -c "${_sudo_} kill ${pid}"
 				fi
 			fi
@@ -197,12 +206,15 @@ function qemu_usage() {
 	echo -e "\t-m [machine]\t select machine."
 	echo -e "\t-t [target...]\t select machine's targets."
 	echo -e "\t-o [option]\t add option to run qemu."
+	echo -e "\t-c\t\t execute in a new console"
+	echo -e "\t-g\t\t run GDB mode with port: ${QEMU_GDB_PORT}"
 	echo -e "\t-k\t\t kill target with -t 'target'"
 	echo -e "\t-d\t\t dump devicetree : ${QEMU_DEVICETREE}.dtb and dts"
 	echo -e "\t\t\t  dtb -> dts: \$ dtc -I dtb -O dts -o 'source' 'binary'"
 	echo -e "\t\t\t  dts -> dtb: \$ dtc -I dts -O dtb -o 'binary' 'source'"
 	echo -e "\t-s\t\t show '${QEMU_MACHINE}' targets"
 	echo -e "\t-e\t\t edit machine '${QEMU_MACHINE}'"
+	echo -e "\t-p\t\t print qemu commands for '${QEMU_MACHINE}'"
 	echo -e "\t-h\t\t show help [fmt]"
 	echo ""
 }
@@ -213,15 +225,18 @@ function qemu_parse_args() {
 
 	qemu_load_machine
 
-	while getopts "m:t:o:lkdseh" opt; do
+	while getopts "m:t:o:lcgkdpseh" opt; do
 		case ${opt} in
 		m) machine="${OPTARG}" ;;
 		l) listup=true ;;
 		t) _qemu_target="${OPTARG}" ;;
 		s) show=true ;;
 		o) _qemu_option="${OPTARG}" ;;
+		c) _qemu_console=true ;;
+		g) _qemu_gdb=true ;;
 		k) stop=true ;;
 		d) _qemu_dumpdtb=true ;;
+		p) _qemu_print=true ;;
 		e) edit=true ;;
 		h)
 			qemu_usage "$(eval "echo \${$OPTIND}")"
@@ -333,6 +348,15 @@ function qemu_run_target() {
 			logmsg "    ${s} ${config[${s}]}"
 		done
 		logmsg ""
+
+		if [[ ${_qemu_gdb} == true ]]; then
+			logmsg " GDB \"tcp::${QEMU_GDB_PORT}\""
+			logmsg " HOST) gdb-multiarch <image> -ex \"set architecture aarch64\" -ex \"target remote localhost:${QEMU_GDB_PORT}\""
+			exec+=("-gdb tcp::${QEMU_GDB_PORT} -S")
+			logmsg ""
+		fi
+
+		[[ ${_qemu_print} == true ]] && break
 
 		qemu_exec_sh "${exec[*]}"
 		break
