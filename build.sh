@@ -733,7 +733,8 @@ function bs_shell_install() {
 		if [[ -n ${args['build_function']} ]]; then
 			fn=${args['build_function']}
 		else
-			return 0
+			bs_copy_install "${1}"
+			return ${?}
 		fi
 	fi
 
