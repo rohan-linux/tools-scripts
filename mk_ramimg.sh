@@ -56,7 +56,7 @@ function pack_cpio () {
 
 	msg " [CPIO]"
 	msg " root     = ${root}"
-	msg " size     = ${rootsz} - total: ${sz}(include VCS .git and .svn)"
+	msg " size     = ${rootsz} - total: ${sz}"
 	msg " output   = ${output}"
 	msg " compress = $(echo ${compress} | cut -d ':' -f1)"
 
@@ -73,14 +73,16 @@ function pack_cpio () {
 		# ${BIN_MKIMAGE} -A ${arch}  -O linux -T ramdisk -C gzip -a 0 -e 0 -n initramfs -d initrd.img ${output}
 		compress=$(echo ${compress} | cut -d ':' -f1)
 		# remove .git .svn
-		find . \( -path ./.git -prune -o -path ./.svn -prune \) -o -print | cpio --quiet -o -H newc > ${output}
+		# find . \( -path ./.git -prune -o -path ./.svn -prune \) -o -print | cpio --quiet -o -H newc > ${output}
+		find . | LC_ALL=C sort | fakeroot cpio --quiet -o -H newc > ${output}
 		popd > /dev/null 2>&1
 		mv ${output} temp.img
 		${BIN_MKIMAGE} -A ${arch}  -O linux -T ramdisk -C ${compress} -a 0 -e 0 -n initramfs -d temp.img ${output}
 		rm temp.img
 	else
 		# remove .git .svn
-		find . \( -path ./.git -prune -o -path ./.svn -prune \) -o -print | fakeroot cpio --quiet -o -H newc > ${output}
+		# find . \( -path ./.git -prune -o -path ./.svn -prune \) -o -print | fakeroot cpio --quiet -o -H newc > ${output}
+		find . | LC_ALL=C sort | fakeroot cpio --quiet -o -H newc > ${output}
 		popd > /dev/null 2>&1
 		if [[ ${compress} != "none" ]]; then
 			compress=$(echo ${compress} | cut -d ':' -f2)
