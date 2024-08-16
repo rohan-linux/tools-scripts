@@ -1105,9 +1105,11 @@ function bs_build_run() {
 			ret="done"
 		else
 			printf "\033[1;32m ********** [ %s ] **********\033[0m\n" "${target['target_name']}"
-			if [[ ${target['build_manual']} == true && -z ${target_name} ]]; then
-				logmsg " - Build manually ..."
-				continue
+			if [[ ${target['build_manual']} == true ]]; then
+				if ! echo "${_build_targets[@]}"  | grep -E -qwz "${target['target_name']}"; then
+					logmsg " - Manually build with '-t ${target['target_name']}' ..."
+					continue
+				fi
 			fi
 
 			declare -n order=system['order']
@@ -1165,10 +1167,10 @@ source "${BS_PROJECT_SELECT}"
 if [[ -z "${_build_targets[@]}" ]]; then
 	for t in "${BS_PROJECT_TARGETS[@]}"; do
 		declare -n target=${t}
-		_build_targets+=("${target['target_name']}")
+		bs_build_run "${target['target_name']}"
+	done
+else
+	for n in "${_build_targets[@]}"; do
+		bs_build_run "${n}"
 	done
 fi
-
-for n in "${_build_targets[@]}"; do
-	bs_build_run "${n}"
-done
