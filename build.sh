@@ -758,6 +758,10 @@ function bs_shell_install() {
 function bs_system_assign() {
 	declare -n t=${1}
 
+	if [[ -z ${t[*]} ]]; then
+		logext " No elements for ${1}"
+	fi
+
 	[[ -n ${t['system']} ]] && return
 
 	for l in "${BS_SYSTEM_LISTS[@]}"; do
