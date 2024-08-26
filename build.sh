@@ -561,7 +561,7 @@ function bs_linux_defconfig() {
 	fi
 
 	if [[ ${_build_command} != "defconfig" && -f "${outdir}/.config" ]]; then
-		logmsg " - skip defconfig, exist '${outdir}/.config' ..."
+		logmsg " - Skip defconfig, Exist '${outdir}/.config' ..."
 		return 0
 	fi
 
@@ -1098,7 +1098,15 @@ function bs_build_run() {
 			else
 				func=${system['command']}
 			fi
+
 			[[ -z ${func} ]] && logext " Not, implement command: '${cmd}'"
+
+			if [[ ${target['build_manual']} == true ]]; then
+				if ! echo "${_build_targets[@]}"  | grep -E -qwz "${target['target_name']}"; then
+					logmsg " - Skip manual build, build with '-t ${target['target_name']}' ..."
+					continue
+				fi
+			fi
 
 			status['command']="${cmd}"
 
@@ -1111,7 +1119,7 @@ function bs_build_run() {
 			printf "\033[1;32m ********** [ %s ] **********\033[0m\n" "${target['target_name']}"
 			if [[ ${target['build_manual']} == true ]]; then
 				if ! echo "${_build_targets[@]}"  | grep -E -qwz "${target['target_name']}"; then
-					logmsg " - Manually build with '-t ${target['target_name']}' ..."
+					logmsg " - Skip Manual build, build with '-t ${target['target_name']}' ..."
 					continue
 				fi
 			fi
