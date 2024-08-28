@@ -109,7 +109,7 @@ _build_targets=()
 _build_image=""
 _build_verbose=false
 _build_option=""
-_build_command=""
+_build_commands=()
 _build_force=false
 _build_jobs="-j$(grep -c processor /proc/cpuinfo)"
 _project_lists=()
@@ -201,7 +201,7 @@ function bs_copy_install() {
 	local dstimg=() dstname=()
 	local exec
 
-	IFS=" " read -r -a dstimg <<<"${args['install_images']}"
+	IFS=" " read -r -a dstimg  <<<"${args['install_images']}"
 	IFS=" " read -r -a dstname <<<"${args['install_names']}"
 
 	[[ -z ${dstimg[*]} ]] && return
@@ -560,9 +560,11 @@ function bs_linux_defconfig() {
 		outdir=${srcdir}
 	fi
 
-	if [[ ${_build_command} != "defconfig" && -f "${outdir}/.config" ]]; then
-		logmsg " - Skip defconfig, Exist '${outdir}/.config' ..."
-		return 0
+	if ! echo "${_build_commands[@]}"  | grep -E -qwz "defconfig"; then
+		if [[ -f "${outdir}/.config" ]]; then
+			logmsg " - Skip defconfig, Exist '${outdir}/.config' ..."
+			return 0
+		fi
 	fi
 
 	exec+=("${args['build_option']}" "${_build_option}" "${args['build_config']}")
@@ -892,12 +894,10 @@ function bs_usage_format() {
 	echo -e "\t['source_directory']=<dir>       - source path, required [cmake|meson|make|linux]"
 	echo -e ""
 	echo -e "\t['build_directory']=<dir>        - build output pathoptional"
-	echo -e "\t['build_prepare']=<shell>        - shell for 'build', runs before 'config', optional"
 	echo -e "\t['build_config']=<config>        - build configs, specify defconfig in [linux]"
 	echo -e "\t['build_option']=<option>        - options for the 'build', and 'install' commands, optional"
 	echo -e "\t['build_images']=<image>         - build target images, optional"
 	echo -e "\t['build_function']=<shell>       - build shell function, required [shell]"
-	echo -e "\t['build_finalize']=<shell>       - build shell, runs after 'build', optional"
 	echo -e ""
 	echo -e "\t['install_directory']=<dir>      - install directory for the builded images, optional"
 	echo -e "\t['install_option']=<option>      - install options, optional"
@@ -909,10 +909,13 @@ function bs_usage_format() {
 	echo -e "\t['install_command']=<command>    - install command, default install."
 	echo -e "\t                                   NOTE. If the 'install_images' is not empty, this option is ignored"
 	echo -e "\t['install_function']=<shell>     - install shell, required [shell]"
-	echo -e "\t['install_complete']=<shell>     - install shell, runs after 'install', optional"
 	echo -e ""
 	echo -e "\t['clean_function']=<shell>       - clean shell, required [shell]"
 	echo -e "\t['clean_option']=<option>        - clean options, optional"
+	echo -e ""
+	echo -e "\t['build_prepare']=<shell>        - shell for 'build', runs before 'config', optional"
+	echo -e "\t['build_finalize']=<shell>       - build shell, runs after 'build', optional"
+	echo -e "\t['install_complete']=<shell>     - install shell, runs after 'install', optional"
 	echo -e "\t)"
 	echo -e ""
 	echo -e " BS_PROJECT_TARGETS=( <TARGET> ... )"
@@ -994,7 +997,13 @@ function bs_build_args() {
 			done
 			;;
 		i) _build_image="${OPTARG}" ;;
-		c) _build_command=${OPTARG} ;;
+		c)
+		   _build_commands=("${OPTARG}")
+			until [[ $(eval "echo \${$OPTIND}") =~ ^-.* ]] || [[ -z "$(eval "echo \${$OPTIND}")" ]]; do
+				_build_commands+=("$(eval "echo \${$OPTIND}")")
+				OPTIND=$((OPTIND + 1))
+			done
+			;;
 		s) show=true ;;
 		o) _build_option="${OPTARG}" ;;
 		f) _build_force=true ;;
@@ -1011,10 +1020,14 @@ function bs_build_args() {
 
 	if [[ ${listup} == true ]]; then
 		bs_project_list
-		[[ -z ${_project_lists[*]} ]] && logext " Not Found PROJECTS : ${BS_PROJECT_PATH}"
+		if [[ -z ${_project_lists[*]} ]]; then
+			logext " Not Found PROJECTS : ${BS_PROJECT_PATH}"
+		fi
 
 		logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]"
-		for i in "${_project_lists[@]}"; do logmsg "            - ${i}"; done
+		for i in "${_project_lists[@]}"; do
+			logmsg "            - ${i}";
+		done
 		exit 0
 	fi
 
@@ -1079,7 +1092,6 @@ function bs_build_run() {
 		# target's build status
 		declare -A status=(['command']="")
 		local ret="unknown"
-		local cmd=${_build_command}
 
 		if [[ -n ${target_name} &&
 			${target['target_name']} != "${target_name}" ]]; then
@@ -1092,29 +1104,31 @@ function bs_build_run() {
 			continue
 		fi
 
-		if [[ -n ${cmd} ]]; then
-			if printf '%s\0' "${!system[@]}" | grep -E -qwz "(${cmd})"; then
-				func=${system[${cmd}]}
-			else
-				func=${system['command']}
-			fi
-
-			[[ -z ${func} ]] && logext " Not, implement command: '${cmd}'"
-
-			if [[ ${target['build_manual']} == true ]]; then
-				if ! echo "${_build_targets[@]}"  | grep -E -qwz "${target['target_name']}"; then
-					logmsg " - Skip manual build, build with '-t ${target['target_name']}' ..."
-					continue
+		if [[ -n ${_build_commands[*]} ]]; then
+			for c in ${_build_commands[*]}; do
+				if printf '%s\0' "${!system[@]}" | grep -E -qwz "(${c})"; then
+					func=${system[${c}]}
+				else
+					func=${system['command']}
 				fi
-			fi
 
-			status['command']="${cmd}"
+				[[ -z ${func} ]] && logext " Not, implement command: '${c}'"
 
-			printf "\033[1;32m %-10s : %-10s\033[0m\n" "* ${target['target_name']}" "${status['command']}"
-			if ! ${func} target status; then
-				logext "-- Error, build verbose(-v) to print error log, build target --"
-			fi
-			ret="done"
+				if [[ ${target['build_manual']} == true ]]; then
+					if ! echo "${_build_targets[@]}"  | grep -E -qwz "${target['target_name']}"; then
+						logmsg " - Skip manual build, build with '-t ${target['target_name']}' ..."
+						continue
+					fi
+				fi
+
+				status['command']="${c}"
+
+				printf "\033[1;32m %-10s : %-10s\033[0m\n" "* ${target['target_name']}" "${status['command']}"
+				if ! ${func} target status; then
+					logext "-- Error, build verbose(-v) to print error log, build target --"
+				fi
+				ret="done"
+			done
 		else
 			printf "\033[1;32m ********** [ %s ] **********\033[0m\n" "${target['target_name']}"
 			if [[ ${target['build_manual']} == true ]]; then
