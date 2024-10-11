@@ -5,9 +5,9 @@ OUTPUT_DIR="$(realpath $(dirname $(realpath "${BASH_SOURCE}")))"
 FASTBOOT_DEVICE= #"FPGA-AB"
 
 declare -A FASTBOOT_IMAGES=(
-	["DTB"]="  0x80600000 0x0100000 : ${OUTPUT_DIR}/linux.dtb"
-	["LINUX"]="0x81000000 0x1000000 : ${OUTPUT_DIR}/Image"
-	["ROOT"]=" 0x82000000 0x3000000 : ${OUTPUT_DIR}/rootfs.cpio"
+	["DTB"]="  0x80600000 : ${OUTPUT_DIR}/linux.dtb"
+	["LINUX"]="0x81000000 : ${OUTPUT_DIR}/Image"
+	["ROOT"]=" 0x82000000 : ${OUTPUT_DIR}/rootfs.cpio"
 )
 
 function logerr() { echo -e "\033[1;31m$*\033[0m"; }
@@ -30,14 +30,18 @@ function fastboot_download() {
 			logerr "Not found ${c} : ${img}"
 			continue
 		fi
+		fsz=$(du -sb ${img} | awk '{ print $1 }')
+		# Align 1MB
+		len=$((((fsz + ((1024 *1024) - 1))/(1024 *1024)) * (1024*1024)))
+		printf -v len '0x%x' ${len}
 
 		logmsg  "[${c}]"
 
 		cmd=( "fastboot" )
 		[[ -n ${FASTBOOT_DEVICE} ]] && cmd+=( "-s ${FASTBOOT_DEVICE}" );
-		cmd+=( "oem run:fastboot_buf ${buf}" )
+		cmd+=( "oem run:fastboot_buf ${buf} ${len}" )
 
-		logmsg  " Set Buffer"
+		logmsg  " -ADDRESS: ${buf}, LENGTH: ${len}"
 		logmsg  " $ ${cmd[*]}"
 		bash -c "${cmd[*]}"
 
@@ -45,7 +49,7 @@ function fastboot_download() {
 		[[ -n ${FASTBOOT_DEVICE} ]] && cmd+=( "-s ${FASTBOOT_DEVICE}" );
 		cmd+=( "boot ${img}" )
 
-		logmsg  " Download"
+		logmsg  " - DOWNLOAD"
 		logmsg  " $ ${cmd[*]}"
 		bash -c "${cmd[*]}"
 
@@ -88,4 +92,3 @@ fi
 
 fastboot_download
 fastboot_exit
-
