@@ -281,28 +281,27 @@ function qemu_parse_args() {
 }
 
 function qemu_check_target() {
-	local name="${1}"
-	local found=false
-	local -a list
+	local target_name="${1}"
 
 	if [[ -z "${QEMU_MACHINE_TARGETS[*]}" ]]; then
 		logext " Not defined 'QEMU_MACHINE_TARGETS' in ${QEMU_MACHINE} !!!"
 	fi
 
-	for i in "${QEMU_MACHINE_TARGETS[@]}"; do
-		declare -n target=${i}
-		list+=("'${target['name']}'")
-		if [[ ${target['name']} == "${name}" ]]; then
-			found=true
-			break
-		fi
-	done
-
-	if [[ ${found} == false ]]; then
-		if [[ -z ${_qemu_target} && ${#list[*]} == 1 ]]; then
-			_qemu_target=${list[0]}
-		else
-			logext " Error, unknown target : ${name} [ ${list[*]} ]"
+	# Check build target
+	if [[ -n ${target_name} ]]; then
+		local found=false
+		local -a list
+		for i in "${QEMU_MACHINE_TARGETS[@]}"; do
+			declare -n target=${i}
+			list+=("'${target['name']}'")
+			if [[ ${target['name']} == "${target_name}" ]]; then
+				found=true
+				break
+			fi
+		done
+		if [[ ${found} == false ]]; then
+			logerr " Error, unknown target : ${target_name} [ ${list[*]} ]"
+			exit 1
 		fi
 	fi
 }
