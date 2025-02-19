@@ -40,10 +40,10 @@ function usage() {
 	echo -e "\t-v\t\tverbose"
 	echo ""
 	echo "flash-table format:"
-	echo -e "\t<dev>,<dev num>:<type>:<target>:<start:hex>,<length:hex>:<image>\""
+	echo -e "\t<dev>,<dev num>:<type>:<target>:<offset:hex>,<length:hex>:<image>\""
 	echo -e "\t- dev     \tflash device name ex. mmc, spi"
 	echo -e "\t- dev num \tflash device number ex. 0 -> mmc.0, 1 -> mmc.1"
-	echo -e "\t- target  \tThe name of the target to update at the <start>,<length>"
+	echo -e "\t- target  \tThe name of the target to update at the <offset>,<length>"
 	echo -e "\t- type    \t'raw', 'mmcboot0', 'mmcboot1', 'gpt', 'dos'"
 	echo -e "\t          \tnote. 'gpt' and 'dos' create a partition table."
 	echo -e "\t- length  \t0 will take the remaining size of the device."
@@ -88,6 +88,33 @@ function parse_target() {
 	done
 }
 
+function print_target() {
+	if [[ ${_show_table} == true ]]; then
+		printf " %8s %10s %10s %12s %12s %12s\n" "Device" "Type" "Target" "Offset" "Length" "Image"
+		for i in "${_flash_tbl_content[@]}"; do
+			device="$(echo "${i}" | cut -d':' -f1)"
+			ptype=$(echo "$(echo "${i}" | cut -d':' -f2)" | cut -d',' -f2)
+			target=$(echo "$(echo "${i}" | cut -d':' -f3)" | cut -d',' -f2)
+			offset=$(echo "$(echo "${i}" | cut -d':' -f4)" | cut -d',' -f2)
+			length=$(echo "$(echo "${i}" | cut -d':' -f4)" | cut -d',' -f2)
+			image=$(echo "$(echo "${i}" | cut -d':' -f5)" | cut -d',' -f2)
+			hulen=
+			b_to_h ${length} hulen
+			printf " %8s %10s %10s %12s %12s(%5s) %s\n" ${device} ${ptype} ${target} ${offset} ${length} ${hulen} ${image}
+		done
+		exit 0
+	fi
+
+	if [[ ${_show_list} == true ]]; then
+		echo -en "Flash targets: "
+		for i in "${_flash_tbl_target[@]}"; do
+			echo -n "${i} "
+		done
+		echo ""
+		exit 0
+	fi
+}
+
 __cdir="./"
 function flash_update() {
 	local flash_images=()
@@ -126,7 +153,7 @@ function flash_update() {
 		command=("sudo" "fastboot" "flash" "${target}" "${image}")
 		exec_sh "${command[*]}"
 		if [[ $? -ne 0 ]]; then
-			logext " - FAILED"
+			logerr " - FAILED"
 		fi
 	done
 }
@@ -178,25 +205,7 @@ fi
 
 parse_content
 parse_target
-
-if [[ ${_show_table} == true ]]; then
-	for i in "${_flash_tbl_content[@]}"; do
-		cont=${i}
-		size=$(echo "$(echo "${i}" | cut -d':' -f4)" | cut -d',' -f2)
-		b_to_h ${size} size
-		echo -e " - ${size}\t: ${cont}"
-	done
-	exit 0
-fi
-
-if [[ ${_show_list} == true ]]; then
-	echo -en "Flash targets: "
-	for i in "${_flash_tbl_target[@]}"; do
-		echo -n "${i} "
-	done
-	echo ""
-	exit 0
-fi
+print_target
 
 if [ -z ${_flash_target} ]; then
 	_flash_target=(${_flash_tbl_target[@]})
