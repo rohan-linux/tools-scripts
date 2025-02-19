@@ -153,7 +153,7 @@ function flash_update() {
 		command=("sudo" "fastboot" "flash" "${target}" "${image}")
 		exec_sh "${command[*]}"
 		if [[ $? -ne 0 ]]; then
-			logerr " - FAILED"
+			logext " - FAILED"
 		fi
 	done
 }
