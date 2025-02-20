@@ -9,7 +9,7 @@ function logext() {
 	exit 1
 }
 
-function exec_sh() {
+function exec_shell() {
 	local exec=${1} err
 
 	# remove first,last space and set multiple space to single space
@@ -55,7 +55,7 @@ function usage() {
 	echo ""
 }
 
-function b_to_h() {
+function btoh() {
 	local val=${1} ret=${2}
 	local KB=$((1024)) MB=$((1024 * 1024)) GB=$((1024 * 1024 * 1024))
 
@@ -99,7 +99,7 @@ function print_target() {
 			length=$(echo "$(echo "${i}" | cut -d':' -f4)" | cut -d',' -f2)
 			image=$(echo "$(echo "${i}" | cut -d':' -f5)" | cut -d',' -f2)
 			hulen=
-			b_to_h ${length} hulen
+			btoh ${length} hulen
 			printf " %8s %10s %10s %12s %12s(%5s) %s\n" ${device} ${ptype} ${target} ${offset} ${length} ${hulen} ${image}
 		done
 		exit 0
@@ -141,7 +141,7 @@ function flash_update() {
 	done
 
 	command=("sudo" "fastboot" "flash" "flash-table" "${_flash_tbl_file}")
-	exec_sh "${command[*]}"
+	exec_shell "${command[*]}"
 	if [[ $? -ne 0 ]]; then
 		logext " - FAILED"
 	fi
@@ -151,7 +151,7 @@ function flash_update() {
 		image=$(echo ${i} | cut -d':' -f 2)
 
 		command=("sudo" "fastboot" "flash" "${target}" "${image}")
-		exec_sh "${command[*]}"
+		exec_shell "${command[*]}"
 		if [[ $? -ne 0 ]]; then
 			logext " - FAILED"
 		fi
@@ -214,5 +214,5 @@ fi
 flash_update
 
 if [[ ${_reboot_done} == true ]]; then
-	exec_sh "sudo fastboot reboot"
+	exec_shell "sudo fastboot reboot"
 fi
