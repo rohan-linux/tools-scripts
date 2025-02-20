@@ -3,12 +3,11 @@
 # - type : support - raw, mmcboot0, mmcboot1, gpt, dos
 # - length : 0 is remain device size
  
-mmc,0:mmcboot0:bl2:0x0,0x10000:dxv3_bl2.img;
-mmc,0:mmcboot0:tfw:0x18000,0x10000:tfw.img;
-mmc,0:mmcboot0:bl31:0x30000,0x200000:bl31.img;
-mmc,0:mmcboot0:uboot:0x230000,0x100000:u-boot.img;
-mmc,0:raw:env:0x330000,0x4000:params_env.bin;
-mmc,0:gpt:boot:0x400000,0x3000000:boot.img;
-mmc,0:gpt:misc:0x3400000,0x1000000:misc.img;
-mmc,0:gpt:rootfs:0x4400000,0x40000000:rootfs.img;
-mmc,0:gpt:data:0x50000000,0x30000000:userdata.img;
+mmc,0:mmcboot0:bl2   :0x00000000,0x00010000:dxv3_bl2.img;   # 64KB
+mmc,0:mmcboot0:tfw   :0x00010000,0x00010000:tfw.img;        # 64KB
+mmc,0:mmcboot0:bl31  :0x00020000,0x00100000:bl31.img;       # 1MB
+mmc,0:mmcboot0:uboot :0x00120000,0x00100000:u-boot.img;     # 1MB
+mmc,0:raw     :env   :0x00100000,0x00100000:u-boot_env.bin; # 1MB, Reserved 1MB for GPT
+mmc,0:gpt     :boot  :0x00200000,0x02000000:boot.img;       # 32M
+mmc,0:gpt     :misc  :0x02200000,0x20000000:rootfs.img;     # 512M
+mmc,0:gpt     :data  :0x22200000,0x00000000:userdata.img;   # 7.4G
