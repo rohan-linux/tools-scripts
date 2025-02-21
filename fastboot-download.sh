@@ -76,10 +76,11 @@ function fastboot_usage() {
 function fastboot_args() {
 	while getopts "d:h" opt; do
 		case ${opt} in
-		d) FASTBOOT_DEVICE="${OPTARG}";;
-		h) fastboot_usage
-		   exit 0 ;;
-		*) exit 1 ;;
+		d)	FASTBOOT_DEVICE="${OPTARG}";;
+		h)	fastboot_usage
+			exit 0
+			;;
+		*)	exit 1 ;;
 		esac
 	done
 }

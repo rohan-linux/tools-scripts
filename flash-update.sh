@@ -168,24 +168,22 @@ _verbose=false
 function flash_args() {
 	while getopts "f:t:d:ilrvh" opt; do
 		case ${opt} in
-		f) _flash_tbl_file="${OPTARG}" ;;
-		t)
-			_flash_target=("${OPTARG}")
+		f)	_flash_tbl_file="${OPTARG}" ;;
+		t)	_flash_target=("${OPTARG}")
 			until [[ $(eval "echo \${$OPTIND}") =~ ^-.* ]] || [[ -z "$(eval "echo \${$OPTIND}")" ]]; do
 				_flash_target+=("$(eval "echo \${$OPTIND}")")
 				OPTIND=$((OPTIND + 1))
 			done
 			;;
-		d) _image_path="${OPTARG}" ;;
-		r) _reboot_done=true ;;
-		l) _show_list=true ;;
-		i) _show_table=true ;;
-		v) _verbose=true ;;
-		h)
-			usage
+		d)	_image_path="${OPTARG}" ;;
+		r)	_reboot_done=true ;;
+		l)	_show_list=true ;;
+		i)	_show_table=true ;;
+		v)	_verbose=true ;;
+		h)	usage
 			exit 0
 			;;
-		*) exit 1 ;;
+		*)	exit 1 ;;
 		esac
 	done
 }

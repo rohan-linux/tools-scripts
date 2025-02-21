@@ -95,16 +95,15 @@ _env_bin_size=16384
 function parse_args() {
 	while getopts "d:c:o:n:s:h" opt; do
 		case ${opt} in
-		d) _uboot_build_dir="${OPTARG}" ;;
-		c) _cross_compile="${OPTARG}" ;;
-		o) _env_output_dir="${OPTARG}" ;;
-		n) _env_bin_name="${OPTARG}" ;;
-		s) _env_bin_size="${OPTARG}" ;;
-		h)
-			usage
+		d)	_uboot_build_dir="${OPTARG}" ;;
+		c)	_cross_compile="${OPTARG}" ;;
+		o)	_env_output_dir="${OPTARG}" ;;
+		n)	_env_bin_name="${OPTARG}" ;;
+		s)	_env_bin_size="${OPTARG}" ;;
+		h)	usage
 			exit 0
 			;;
-		*) exit 1 ;;
+		*)	exit 1 ;;
 		esac
 	done
 }

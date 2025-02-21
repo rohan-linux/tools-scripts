@@ -129,16 +129,15 @@ _verbose=false
 function gen_image_args() {
 	while getopts "d:l:s:o:vh" opt; do
 		case ${opt} in
-		d) _image_path="${OPTARG}" ;;
-		l) _image_label="${OPTARG}" ;;
-		s) _image_size="${OPTARG}" ;;
-		o) _image_output="${OPTARG}" ;;
-		v) _verbose=true ;;
-		h)
-			usage
+		d)	_image_path="${OPTARG}" ;;
+		l)	_image_label="${OPTARG}" ;;
+		s)	_image_size="${OPTARG}" ;;
+		o)	_image_output="${OPTARG}" ;;
+		v)	_verbose=true ;;
+		h)	usage
 			exit 0
 			;;
-		*) exit 1 ;;
+		*)	exit 1 ;;
 		esac
 	done
 }
