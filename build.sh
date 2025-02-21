@@ -762,8 +762,7 @@ function bs_system_assign() {
 
 function bs_target_list() {
 	if [[ -z "${BS_PROJECT_TARGETS[*]}" ]]; then
-		logerr " Not defined 'BS_PROJECT_TARGETS' in ${BS_PROJECT} !!!"
-		exit 1
+		logext " Not defined 'BS_PROJECT_TARGETS' in ${BS_PROJECT} !!!"
 	fi
 
 	logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]\n"
@@ -848,8 +847,7 @@ function bs_project_menu() {
 	done
 
 	if [[ -z ${entry[*]} ]]; then
-		logerr " Not found build project in ${path}"
-		exit 1
+		logext " Not found build project in ${path}"
 	fi
 
 	if ! which whiptail >/dev/null 2>&1; then
@@ -995,7 +993,7 @@ function bs_build_args() {
 		h)	bs_usage "$(eval "echo \${$OPTIND}")"
 			exit 0
 			;;
-		*) exit 1 ;;
+		*)	exit 1 ;;
 		esac
 	done
 
@@ -1034,8 +1032,7 @@ function bs_build_check() {
 	local target_name="${1}"
 
 	if [[ -z "${BS_PROJECT_TARGETS[*]}" ]]; then
-		logerr " Not defined 'BS_PROJECT_TARGETS' in ${BS_PROJECT} !!!"
-		exit 1
+		logext " Not defined 'BS_PROJECT_TARGETS' in ${BS_PROJECT} !!!"
 	fi
 
 	# Check build target
@@ -1051,8 +1048,7 @@ function bs_build_check() {
 			fi
 		done
 		if [[ ${found} == false ]]; then
-			logerr " Error, unknown target : ${target_name} [ ${list[*]} ]"
-			exit 1
+			logext " Error, unknown target : ${target_name} [ ${list[*]} ]"
 		fi
 	fi
 }
@@ -1163,8 +1159,7 @@ function bs_build_run() {
 bs_build_args "${@}"
 
 if [[ -z ${BS_PROJECT} ]]; then
-	logerr " Not Selected Project, PATH: ${BS_PROJECT_PATH}"
-	exit 0
+	logext " Not Selected Project, PATH: ${BS_PROJECT_PATH}"
 fi
 
 logmsg " PROJECT    : ${BS_PROJECT} [${BS_PROJECT_SELECT}]\n"
