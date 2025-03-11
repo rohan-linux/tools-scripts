@@ -209,9 +209,11 @@ function bs_copy_install() {
 	if ! mkdir -p "${dir}"; then exit 1; fi
 
 	dir=$(realpath "${dir}")
-	# print install images
+
+	# prepare to install images
 	for i in ${!simg[*]}; do
-		if [[ ! -f "${simg[${i}]}" && ! -d "${simg[${i}]}" ]]; then
+		local matches=(${simg[${i}]})
+		if [[ ${#matches[@]} -eq 0 || ! -e "${matches[0]}" ]]; then
 			logerr "   No such file or directory: '${simg[${i}]}'"
 			if [[ ${_build_force} == true ]]; then
 				# remove element
@@ -225,22 +227,32 @@ function bs_copy_install() {
 		else
 			timg[${i}]=${dir}/${timg[${i}]}
 		fi
+
+		# re-create target directory
+		if [[ -d "${matches[0]}" ]]; then
+			if [[ -d ${timg[${i}]} ]]; then
+				bash -c "rm -rf ${timg[${i}]}"
+			fi
+			if ! mkdir -p "${timg[${i}]}"; then
+				exit 1
+			fi
+		fi
+		# create copy directory
+		if [[ "${timg[${i}]}" == */ ]] && ! mkdir -p "${timg[${i}]}"; then
+			exit 1
+		fi
+		# create upper directory
+		if ! mkdir -p "$(dirname ${timg[${i}]})"; then
+			exit 1
+		fi
+
 		logmsg "   ${simg[${i}]} > ${timg[${i}]}"
 	done
 
 	[[ ${_build_verbose} == false ]] && bs_prog_run
 
-	# copy install images
+	# copy images
 	for i in ${!simg[*]}; do
-		# delete timg directory
-		if [[ -d ${timg[${i}]} ]]; then
-			bash -c "rm -rf ${timg[${i}]}"
-		fi
-
-		if ! mkdir -p "$(dirname "${timg[${i}]}")"; then
-			exit 1
-		fi
-
 		exec="cp -a ${simg[${i}]} ${timg[${i}]}"
 		if [[ ${_build_verbose} == true ]]; then
 			bash -c "${exec}"
