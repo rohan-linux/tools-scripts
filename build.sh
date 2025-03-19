@@ -246,7 +246,7 @@ function bs_copy_install() {
 			exit 1
 		fi
 
-		logmsg "   ${simg[${i}]} > ${timg[${i}]}"
+		logmsg "   ${simg[${i}]} > $(realpath "${timg[${i}]}")"
 	done
 
 	[[ ${_build_verbose} == false ]] && bs_prog_run
