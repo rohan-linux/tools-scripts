@@ -802,8 +802,9 @@ function bs_target_list() {
 	for t in "${BS_PROJECT_TARGETS[@]}"; do
 		bs_system_assign "${t}"
 		declare -n target=${t}
-		printf "\033[0;33m %-10s : %-6s - %s\033[0m\n" \
-			"* ${target['target_name']}" "${target['build_type']}" "${target['build_images']}"
+		if [[ ${target['build_manual']} == true ]]; then mark="[m]"; else mark="[*]"; fi
+		printf "\033[0;33m %s %-10s : %-6s - %s\033[0m\n" \
+			"${mark}" "${target['target_name']}" "${target['build_type']}" "${target['build_images']}"
 	done
 }
 
