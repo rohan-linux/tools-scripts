@@ -136,11 +136,12 @@ function bs_prog_start() {
 
 function bs_prog_kill() {
 	local pid=${_program_id}
-	if pidof "${pid}"; then return; fi
-	if [[ ${pid} -ne 0 && -e /proc/${pid} ]]; then
-		kill "${pid}" 2>/dev/null
+	# Check if pid is set, non-zero, and the process actually exists
+	if [[ -n "${pid}" && "${pid}" -ne 0 ]] && kill -0 "${pid}" 2>/dev/null; then
+		kill "${pid}" 2>/dev/null # Send SIGTERM to the spinner
 		wait "${pid}" 2>/dev/null
 		echo ""
+		_program_id="" # Reset the PID after killing
 	fi
 }
 
@@ -174,8 +175,9 @@ function bs_exec_shell() {
 	return ${err}
 }
 
-# return 1 if current version($2) is greater than or equal to min version($1)
-# else return 0
+# Compare two version strings (e.g., "1.2.3").
+# Returns 0 (success) if current_version ($2) is greater than or equal to min_version ($1).
+# Returns 1 (failure) if current_version ($2) is less than min_version ($1).
 function bs_version_compare() {
 	local min_v # ${1}
 	local cur_v # ${2}
@@ -277,7 +279,7 @@ function bs_remove_delete() {
 		return 0
 	fi
 
-	bs_exec_shell "${exec[*]}"
+	bs_exec_shell "${exec}"
 
 	return ${?}
 }
@@ -904,13 +906,13 @@ function bs_project_menu() {
 function bs_usage_format() {
 	echo -e " FORMAT: Target elements\n"
 	echo -e " declare -A <TARGET>=("
-	echo -e "\t['build_manual']=<name>          - build manually, [true|false] default false"
+	echo -e "\t['build_manual']=<boolean>       - build manually, [true|false] default false"
 	echo -e "\t['target_name']=<name>           - build target name, required"
-	echo -e "\t['build_type']=<type>            - build sytem type [cmake|meson|make|linux|shell], required"
+	echo -e "\t['build_type']=<type>            - build system type [cmake|meson|make|linux|shell], required"
 	echo -e ""
-	echo -e "\t['source_directory']=<dir>       - source path, required [cmake|meson|make|linux]"
+	echo -e "\t['source_directory']=<dir>       - source path, required for [cmake|meson|make|linux]"
 	echo -e ""
-	echo -e "\t['build_directory']=<dir>        - build output pathoptional"
+	echo -e "\t['build_directory']=<dir>        - build output path, optional"
 	echo -e "\t['build_config']=<config>        - build configs, specify defconfig in [linux]"
 	echo -e "\t['build_option']=<option>        - options for the 'build', and 'install' commands, optional"
 	echo -e "\t['build_images']=<image>         - build target images, optional"
