@@ -5,8 +5,8 @@ An advanced static stack analyzer for embedded software using GCC's .su and
 .cgraph files.
 
 Key Features:
-- Parses stack size per function from .su files.
-- Builds a static call graph from .cgraph files using a single-pass method.
+- Parses stack size per function from .su files across multiple directories.
+- Builds a static call graph from .cgraph files from multiple directories.
 - Auto-detects Interrupt Service Routines (ISRs) from the ELF vector table.
 - Supports annotations for hard-to-analyze calls (e.g., callbacks) via --add-calls.
 - Analyzes worst-case stack usage and call paths for different scenarios.
@@ -50,56 +50,53 @@ def _validate_file_path(filepath):
 
 
 # --- Core Parsing and Graph Building Functions ---
-def parse_su_files(su_dir, is_debug_mode):
+def parse_su_files(su_dirs, is_debug_mode):
     """
-    Recursively parses .su files to extract stack usage per function.
+    [MODIFIED] Recursively parses .su files from a list of directories.
 
     Args:
-        su_dir (str): Directory containing .su files.
+        su_dirs (list): A list of directories containing .su files.
         is_debug_mode (bool): Flag to enable debug output.
 
     Returns:
         dict: A dictionary of {function_name: stack_size}.
-              Returns None if the directory is not found.
     """
     stack_usage = {}
-    if not os.path.isdir(su_dir):
-        print(f"Error: Directory not found - {su_dir}")
-        return None
+    total_files_processed = 0
 
-    debug_print(f"  DBG: Starting to walk SU directory: {su_dir}", is_debug_mode)
-    file_count = 0
-    for dirpath, _, filenames in os.walk(su_dir):
-        for filename in filenames:
-            if filename.endswith(".su"):
-                file_count += 1
-                filepath = os.path.join(dirpath, filename)
-                debug_print(f"    -> Parsing .su file ({file_count}): {filepath}", is_debug_mode)
-                with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                    for line in f:
-                        try:
-                            parts = line.strip().split()
-                            if len(parts) >= 2:
-                                func_name = parts[0].split(':')[3]
-                                stack_size = int(parts[1])
-                                stack_usage[func_name] = stack_size
-                        except (IndexError, ValueError):
-                            print(f"  [Warning] Skipping malformed line in '{filepath}': '{line.strip()}'")
+    for su_dir in su_dirs:
+        if not os.path.isdir(su_dir):
+            print(f"{COLOR_BRIGHT_YELLOW}[Warning] Directory for --su-dir not found, skipping: {su_dir}{COLOR_RESET}")
+            continue
 
-    debug_print(f"  DBG: Processed a total of {file_count} .su files.", is_debug_mode)
-    debug_print(f"  DBG: Finished parsing SU files.", is_debug_mode)
+        debug_print(f"  DBG: Walking SU directory: {su_dir}", is_debug_mode)
+        
+        for dirpath, _, filenames in os.walk(su_dir):
+            for filename in filenames:
+                if filename.endswith(".su"):
+                    total_files_processed += 1
+                    filepath = os.path.join(dirpath, filename)
+                    debug_print(f"    -> Parsing .su file ({total_files_processed}): {filepath}", is_debug_mode)
+                    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                        for line in f:
+                            try:
+                                parts = line.strip().split()
+                                if len(parts) >= 2:
+                                    func_name = parts[0].split(':')[3]
+                                    stack_size = int(parts[1])
+                                    # If a function is defined in multiple places, keep the largest stack size.
+                                    if func_name not in stack_usage or stack_size > stack_usage[func_name]:
+                                        stack_usage[func_name] = stack_size
+                            except (IndexError, ValueError):
+                                print(f"  [Warning] Skipping malformed line in '{filepath}': '{line.strip()}'")
+
+    debug_print(f"  DBG: Processed a total of {total_files_processed} .su files.", is_debug_mode)
     return stack_usage
 
 
 def load_annotation_file(filepath):
     """
     Loads a call relationship annotation file (e.g., --ignore-calls, --add-calls).
-
-    Args:
-        filepath (str): Path to the annotation file.
-
-    Returns:
-        set: A set of (caller, callee) tuples.
     """
     annotation_set = set()
     if not filepath:
@@ -120,63 +117,64 @@ def load_annotation_file(filepath):
     return annotation_set
 
 
-def build_base_call_graph_from_cgraph(cgraph_dir, ignore_set, is_debug_mode):
+def build_base_call_graph_from_cgraph(cgraph_dirs, ignore_set, is_debug_mode):
     """
-    Builds the base call graph from cgraph files in a single pass.
+    [MODIFIED] Builds the base call graph from a list of cgraph directories.
 
     Args:
-        cgraph_dir (str): Directory containing .cgraph files.
+        cgraph_dirs (list): A list of directories containing .cgraph files.
         ignore_set (set): A set of (caller, callee) pairs to ignore.
         is_debug_mode (bool): Flag to enable debug output.
 
     Returns:
         tuple: (call_graph, unresolved_report, cgraph_files_found)
     """
-    if not cgraph_dir or not os.path.isdir(cgraph_dir):
-        print(f"Error: cgraph directory not found or not specified: {cgraph_dir}")
-        return None, None, False
-
     symbol_map = {}
     temp_call_relations = defaultdict(list)
-    current_caller_name_in_file = None
-    cgraph_files_found = False
-    file_count = 0
+    any_cgraph_files_found = False
+    total_files_processed = 0
 
-    debug_print(f"  DBG: Starting single-pass cgraph processing in: {cgraph_dir}", is_debug_mode)
+    for cgraph_dir in cgraph_dirs:
+        if not os.path.isdir(cgraph_dir):
+            print(f"{COLOR_BRIGHT_YELLOW}[Warning] Directory for --cgraph-dir not found, skipping: {cgraph_dir}{COLOR_RESET}")
+            continue
 
-    for dirpath, _, filenames in os.walk(cgraph_dir):
-        for filename in filenames:
-            if ".cgraph" not in filename and ".ipa" not in filename:
-                continue
+        debug_print(f"  DBG: Walking cgraph directory: {cgraph_dir}", is_debug_mode)
+        current_caller_name_in_file = None
+        
+        for dirpath, _, filenames in os.walk(cgraph_dir):
+            for filename in filenames:
+                if ".cgraph" not in filename and ".ipa" not in filename:
+                    continue
 
-            cgraph_files_found = True
-            file_count += 1
-            filepath = os.path.join(dirpath, filename)
-            
-            debug_print(f"    -> Processing cgraph file ({file_count}): {filepath}", is_debug_mode)
+                any_cgraph_files_found = True
+                total_files_processed += 1
+                filepath = os.path.join(dirpath, filename)
+                
+                debug_print(f"    -> Processing cgraph file ({total_files_processed}): {filepath}", is_debug_mode)
 
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                for line in f:
-                    symbol_match = CGRAPH_SYMBOL_DEF_RE.match(line)
-                    if symbol_match:
-                        name_with_id, num_id, actual_name = symbol_match.groups()
-                        symbol_map[f"{name_with_id}/{num_id}"] = actual_name
-                        current_caller_name_in_file = actual_name
-                        continue
-                    if current_caller_name_in_file:
-                        calls_match = CGRAPH_CALLS_LINE_RE.match(line)
-                        if calls_match:
-                            temp_call_relations[current_caller_name_in_file].extend(calls_match.group(1).split())
-                            current_caller_name_in_file = None
+                with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                    for line in f:
+                        symbol_match = CGRAPH_SYMBOL_DEF_RE.match(line)
+                        if symbol_match:
+                            name_with_id, num_id, actual_name = symbol_match.groups()
+                            symbol_map[f"{name_with_id}/{num_id}"] = actual_name
+                            current_caller_name_in_file = actual_name
+                            continue
+                        if current_caller_name_in_file:
+                            calls_match = CGRAPH_CALLS_LINE_RE.match(line)
+                            if calls_match:
+                                temp_call_relations[current_caller_name_in_file].extend(calls_match.group(1).split())
+                                current_caller_name_in_file = None
 
-    if not cgraph_files_found:
-        msg = (f"{COLOR_BRIGHT_YELLOW}[Warning] No .cgraph or .ipa files found in '{cgraph_dir}'.\n"
+    if not any_cgraph_files_found:
+        dirs_str = ', '.join(cgraph_dirs)
+        msg = (f"{COLOR_BRIGHT_YELLOW}[Warning] No .cgraph or .ipa files found in specified directories: {dirs_str}\n"
                f"   To generate them, the project must be built with the '-fdump-ipa-cgraph' compiler option.{COLOR_RESET}")
         g_deferred_warnings.append(msg)
     
-    debug_print(f"  DBG: Processed a total of {file_count} cgraph/ipa files.", is_debug_mode)
+    debug_print(f"  DBG: Processed a total of {total_files_processed} cgraph/ipa files.", is_debug_mode)
     debug_print(f"  DBG: Symbol map built with {len(symbol_map)} entries.", is_debug_mode)
-    debug_print(f"  DBG: Found call relations for {len(temp_call_relations)} functions.", is_debug_mode)
 
     call_graph = defaultdict(list)
     unresolved_report = []
@@ -193,7 +191,7 @@ def build_base_call_graph_from_cgraph(cgraph_dir, ignore_set, is_debug_mode):
                 unresolved_report.append((caller_normalized, callee_symbol))
 
     debug_print("  DBG: Finished cgraph processing.", is_debug_mode)
-    return call_graph, unresolved_report, cgraph_files_found
+    return call_graph, unresolved_report, any_cgraph_files_found
 
 
 def get_isr_entry_points(elf_file, vector_table_name, is_debug_mode):
@@ -381,9 +379,10 @@ def main():
         description="Advanced static stack analyzer using GCC cgraph files.",
         formatter_class=argparse.RawTextHelpFormatter
     )
+    # [MODIFIED] Allow multiple directories for su-dir and cgraph-dir
     parser.add_argument('--elf-file', required=True, help="Path to the output ELF file.")
-    parser.add_argument('--su-dir', required=True, help="Directory containing .su files.")
-    parser.add_argument('--cgraph-dir', required=True, help="Directory containing .cgraph files.")
+    parser.add_argument('--su-dir', nargs='+', help="One or more directories containing .su files.")
+    parser.add_argument('--cgraph-dir', nargs='+', help="One or more directories containing .cgraph files.")
     parser.add_argument('--start-func', default='main', help="Comma-separated list of entry points (e.g., main,task1).")
     parser.add_argument('--vector-table', help="Symbol name of the vector table (e.g., g_pfnVectors).")
     parser.add_argument('--ignore-calls', help="File with 'caller,callee' pairs to ignore.")
@@ -393,27 +392,35 @@ def main():
 
     debug_print("DEBUG MODE ENABLED", args.debug)
 
+    # [MODIFIED] Handle directory inference logic
+    if not args.su_dir and not args.cgraph_dir:
+        parser.error("At least one of --su-dir or --cgraph-dir must be specified.")
+
+    su_dirs = args.su_dir if args.su_dir else args.cgraph_dir
+    cgraph_dirs = args.cgraph_dir if args.cgraph_dir else args.su_dir
+
+    if not args.su_dir:
+        debug_print(f"  DBG: --su-dir not specified, defaulting to cgraph-dir: {su_dirs}", args.debug)
+    if not args.cgraph_dir:
+        debug_print(f"  DBG: --cgraph-dir not specified, defaulting to su-dir: {cgraph_dirs}", args.debug)
+
     # 1. Parse Stack Usage (.su) files
-    print("1. Parsing .su files (recursively)...")
-    stack_usage = parse_su_files(args.su_dir, args.debug)
+    print("1. Parsing .su files...")
+    stack_usage = parse_su_files(su_dirs, args.debug)
 
     if not stack_usage:
-        print(f"{COLOR_RED}[Error] No stack usage (.su) files found in '{args.su_dir}'.")
+        dirs_str = ', '.join(su_dirs)
+        print(f"{COLOR_RED}[Error] No stack usage (.su) files found in specified directories: {dirs_str}")
         print(f"   Please ensure the project is built with the '-fstack-usage' compiler option.{COLOR_RESET}")
         exit(1)
     print(f"   Found stack usage for {len(stack_usage)} functions.")
 
     # 2. Build Call Graph (.cgraph) files
-    print("\n2. Building base call graph from cgraph files...")
+    print("\n2. Building base call graph...")
     ignore_set = load_annotation_file(args.ignore_calls)
-    base_call_graph, _, cgraph_found = build_base_call_graph_from_cgraph(args.cgraph_dir, ignore_set, args.debug)
-
-    if not cgraph_found:
-        msg = (f"{COLOR_BRIGHT_YELLOW}[Warning] No .cgraph or .ipa files found in '{args.cgraph_dir}'.\n"
-               f"   To generate them, the project must be built with the '-fdump-ipa-cgraph' compiler option.{COLOR_RESET}")
-        g_deferred_warnings.append(msg)
-
-    if base_call_graph is None:
+    base_call_graph, _, _ = build_base_call_graph_from_cgraph(cgraph_dirs, ignore_set, args.debug)
+    
+    if base_call_graph is None: # This would be an unexpected error
         print("Fatal: Failed to build base call graph. Exiting.")
         exit(1)
     print(f"   Base call graph built with {len(base_call_graph)} calling functions.")
@@ -444,7 +451,6 @@ def main():
     # 4. Run Analyses
     all_scenarios_add_sets = {f: load_annotation_file(f) for f in args.add_calls} if args.add_calls else {}
     
-    # "Uncalled Functions" analysis only runs in debug mode.
     if args.debug:
         _run_uncalled_functions_analysis(stack_usage, base_call_graph, all_scenarios_add_sets, final_entry_points)
     
