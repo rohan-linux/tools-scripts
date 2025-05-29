@@ -52,7 +52,7 @@ def _validate_file_path(filepath):
 # --- Core Parsing and Graph Building Functions ---
 def parse_su_files(su_dirs, is_debug_mode):
     """
-    [MODIFIED] Recursively parses .su files from a list of directories.
+    Recursively parses .su files from a list of directories.
 
     Args:
         su_dirs (list): A list of directories containing .su files.
@@ -84,7 +84,6 @@ def parse_su_files(su_dirs, is_debug_mode):
                                 if len(parts) >= 2:
                                     func_name = parts[0].split(':')[3]
                                     stack_size = int(parts[1])
-                                    # If a function is defined in multiple places, keep the largest stack size.
                                     if func_name not in stack_usage or stack_size > stack_usage[func_name]:
                                         stack_usage[func_name] = stack_size
                             except (IndexError, ValueError):
@@ -119,15 +118,7 @@ def load_annotation_file(filepath):
 
 def build_base_call_graph_from_cgraph(cgraph_dirs, ignore_set, is_debug_mode):
     """
-    [MODIFIED] Builds the base call graph from a list of cgraph directories.
-
-    Args:
-        cgraph_dirs (list): A list of directories containing .cgraph files.
-        ignore_set (set): A set of (caller, callee) pairs to ignore.
-        is_debug_mode (bool): Flag to enable debug output.
-
-    Returns:
-        tuple: (call_graph, unresolved_report, cgraph_files_found)
+    Builds the base call graph from a list of cgraph directories.
     """
     symbol_map = {}
     temp_call_relations = defaultdict(list)
@@ -233,39 +224,73 @@ def get_isr_entry_points(elf_file, vector_table_name, is_debug_mode):
 
 # --- Analysis and Reporting Functions ---
 def find_worst_case_stack_path(start_function, call_graph, stack_usage, scenario_additions=None):
-    """Finds the worst-case stack path from a start function using DFS."""
+    """
+    DFS(깊이 우선 탐색)를 사용하여 특정 시작 함수로부터 최악의 스택 사용 경로를 찾습니다.
+    이 함수는 메모이제이션(Memoization) 기법을 사용하여 중복 계산을 피해 성능을 최적화합니다.
+
+    Args:
+        start_function (str): 분석을 시작할 함수 이름.
+        call_graph (dict): 기본 호출 그래프.
+        stack_usage (dict): 함수별 스택 사용량 정보.
+        scenario_additions (dict, optional): 시나리오별로 추가된 {caller: [callee]} 호출.
+
+    Returns:
+        tuple: (total_stack, path)
+               - total_stack (float): 최악 경로의 총 스택 사용량. 재귀 시 'inf'.
+               - path (list): 최악 스택 사용량에 해당하는 호출 경로.
+    """
+    # 메모이제이션을 위한 딕셔너리(캐시)입니다.
+    # 한번 계산된 함수의 결과 (최악 스택, 경로)를 저장하여 중복 계산을 방지합니다.
     memo = {}
     scenario_additions = scenario_additions or {}
 
     def get_callees(func):
+        """기본 그래프와 시나리오 추가 호출을 합쳐서 자식 노드(피호출자)를 반환합니다."""
         base_callees = call_graph.get(func, [])
         added_callees = scenario_additions.get(func, [])
-        return list(dict.fromkeys(base_callees + added_callees))
+        return list(dict.fromkeys(base_callees + added_callees))  # 중복 제거
 
     def dfs(func, visited_path):
-        if func in visited_path:
-            recursion_path = visited_path[visited_path.index(func):] + [func]
-            return (float('inf'), recursion_path)
+        """재귀적 깊이 우선 탐색 함수."""
+        # --- [메모이제이션 - 1단계: 결과 확인 및 재사용] ---
+        # 이전에 'func'에 대한 최악 경로를 이미 계산했다면, 저장된 결과를 즉시 반환합니다.
+        # 이를 통해 동일한 함수에 대한 반복적인 경로 탐색을 방지하여 성능을 크게 향상시킵니다.
         if func in memo:
             return memo[func]
 
+        # 순환 경로 감지 (현재 탐색 중인 경로에 func이 이미 포함된 경우)
+        if func in visited_path:
+            recursion_path = visited_path[visited_path.index(func):] + [func]
+            return (float('inf'), recursion_path)
+
+        # --- [경로 탐색 및 계산] ---
+        # (이 부분은 func에 대한 결과가 캐시에 없을 때만 실행됩니다)
         path_with_current = visited_path + [func]
         max_stack_from_callees, worst_callee_path = 0, []
 
         for callee in get_callees(func):
+            # 하위 함수(callee)에 대한 최악 경로를 재귀적으로 탐색합니다.
             stack, path_suffix = dfs(callee, path_with_current)
+            # 가장 스택을 많이 사용하는 하위 경로를 선택합니다.
             if stack > max_stack_from_callees:
                 max_stack_from_callees = stack
                 worst_callee_path = path_suffix
 
+        # 현재 함수의 스택 크기와 하위 경로의 최대 스택 크기를 더합니다.
         current_stack = stack_usage.get(func, stack_usage.get(func.split('.')[0], 0))
         total_stack = current_stack + max_stack_from_callees
         final_path = [func] + worst_callee_path
 
+        # --- [메모이제이션 - 2단계: 결과 저장] ---
+        # 'func'에 대한 경로 계산이 끝난 후, 그 결과를 'memo' 딕셔너리에 저장합니다.
+        # 키(key)는 함수 이름, 값(value)은 (총 스택, 경로 리스트) 튜플입니다.
+        # 순환 경로('inf')가 아닌 유효한 결과만 저장하여, 다음 번 동일한 'func' 호출 시 재사용할 수 있도록 합니다.
         if total_stack != float('inf'):
             memo[func] = (total_stack, final_path)
+            
         return total_stack, final_path
 
+    # 분석 시작 함수부터 DFS 탐색을 시작합니다.
     return dfs(start_function, [])
 
 
@@ -379,7 +404,6 @@ def main():
         description="Advanced static stack analyzer using GCC cgraph files.",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    # [MODIFIED] Allow multiple directories for su-dir and cgraph-dir
     parser.add_argument('--elf-file', required=True, help="Path to the output ELF file.")
     parser.add_argument('--su-dir', nargs='+', help="One or more directories containing .su files.")
     parser.add_argument('--cgraph-dir', nargs='+', help="One or more directories containing .cgraph files.")
@@ -392,7 +416,6 @@ def main():
 
     debug_print("DEBUG MODE ENABLED", args.debug)
 
-    # [MODIFIED] Handle directory inference logic
     if not args.su_dir and not args.cgraph_dir:
         parser.error("At least one of --su-dir or --cgraph-dir must be specified.")
 
@@ -420,7 +443,7 @@ def main():
     ignore_set = load_annotation_file(args.ignore_calls)
     base_call_graph, _, _ = build_base_call_graph_from_cgraph(cgraph_dirs, ignore_set, args.debug)
     
-    if base_call_graph is None: # This would be an unexpected error
+    if base_call_graph is None:
         print("Fatal: Failed to build base call graph. Exiting.")
         exit(1)
     print(f"   Base call graph built with {len(base_call_graph)} calling functions.")
