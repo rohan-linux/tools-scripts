@@ -2,12 +2,14 @@
 #
 
 OUTPUT_DIR="$(realpath $(dirname $(realpath "${BASH_SOURCE}")))"
-FASTBOOT_DEVICE= #"FPGA-AB"
+FASTBOOT_DEVICE= #"HAPS-AB"
+FASTBOOT_LIST_IMAGE=false
+FASTBOOT_TARGETS=()
 
 declare -A FASTBOOT_IMAGES=(
-	["DTB"]="  0x80600000 : ${OUTPUT_DIR}/linux.dtb"
-	["LINUX"]="0x81000000 : ${OUTPUT_DIR}/Image"
-	["ROOT"]=" 0x82000000 : ${OUTPUT_DIR}/rootfs.cpio"
+	["dtb"]="0x80600000 : ${OUTPUT_DIR}/linux.dtb"
+	["linux"]="0x81000000 : ${OUTPUT_DIR}/Image"
+	["root"]="0x83000000 : ${OUTPUT_DIR}/rootfs.cpio"
 )
 
 function logerr() { echo -e "\033[1;31m$*\033[0m"; }
@@ -21,6 +23,16 @@ function fastboot_download() {
 	logmsg "Fastboot Download"
 
 	for c in ${!FASTBOOT_IMAGES[*]}; do
+		local found=false
+		for t in ${FASTBOOT_TARGETS[*]}; do
+			if [[ ${c} == ${t} ]]; then
+				found=true
+				break;
+			fi
+		done
+
+		[[ ${found} == false ]] && continue;
+
 		local ctx="${FASTBOOT_IMAGES[${c}]}"
 		local buf=$(echo ${ctx} | cut -d':' -f1 | sed 's/^[ \t]*//;s/[ \t]*$//;s/\s\s*/ /g')
 		local img=$(echo ${ctx} | cut -d':' -f2 | sed 's/^[ \t]*//;s/[ \t]*$//;s/\s\s*/ /g')
@@ -69,14 +81,24 @@ function fastboot_usage() {
 	echo -e "\t$ sudo $(basename "${0}") <option>"
 	echo " option:"
 	echo -e "\t-d <DEVICE>\t specify a device $ fastboot devices"
+	echo -e "\t-l\t\t show download images"
+	echo -e "\t-t\t\t download targets"
 	echo -e "\t-h\t\t show help"
 	echo ""
 }
 
 function fastboot_args() {
-	while getopts "d:h" opt; do
+	while getopts "d:t:lh" opt; do
 		case ${opt} in
 		d)	FASTBOOT_DEVICE="${OPTARG}";;
+		t)	FASTBOOT_TARGETS=("${OPTARG}")
+			until [[ $(eval "echo \${$OPTIND}") =~ ^-.* ]] || [[ -z "$(eval "echo \${$OPTIND}")" ]]; do
+				FASTBOOT_TARGETS+=("$(eval "echo \${$OPTIND}")")
+				OPTIND=$((OPTIND + 1))
+			done
+			;;
+
+		l)	FASTBOOT_LIST_IMAGE=true;;
 		h)	fastboot_usage
 			exit 0
 			;;
@@ -87,8 +109,21 @@ function fastboot_args() {
 
 fastboot_args "${@}"
 
+if [[ ${FASTBOOT_LIST_IMAGE} == true ]]; then
+	logmsg "Download Images:"
+	for c in ${!FASTBOOT_IMAGES[*]}; do
+		ctx="${FASTBOOT_IMAGES[${c}]}"
+		logmsg "[${c}]\t${ctx}"
+	done
+	exit 0
+fi
+
 if [[ $(id -u) -ne 0 ]]; then
 	logext "Please run this script as root or using sudo!"
+fi
+
+if [[ -z ${FASTBOOT_TARGETS} ]]; then
+	FASTBOOT_TARGETS=(${!FASTBOOT_IMAGES[@]})
 fi
 
 fastboot_download
