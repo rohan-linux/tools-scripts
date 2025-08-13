@@ -753,11 +753,11 @@ function bs_shell_install() {
 	local func=${args['install_function']}
 
 	if [[ -z ${func} ]]; then
-		if [[ -z ${args['install_images']} && -n ${args['build_function']} ]]; then
-			func=${args['build_function']}
-		else
+		if [[ -n ${args['install_images']} ]]; then
 			bs_copy_install "${1}"
 			return ${?}
+		else
+			return 0
 		fi
 	fi
 
