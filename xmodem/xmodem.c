@@ -113,7 +113,8 @@ int xmodem_send(int fd, FILE *file)
 		}
 
 		while (1) {
-			struct timeval tv = { 5, 0 };
+			fd_set fds;
+			struct timeval tv;
 			int sel;
 
 			packet[0] = SOH;
@@ -134,12 +135,20 @@ int xmodem_send(int fd, FILE *file)
 				return -1;
 			}
 
-			fd_set fds;
+retry:
 			FD_ZERO(&fds);
 			FD_SET(fd, &fds);
+			tv.tv_sec = 10;
+			tv.tv_usec = 0;
 
 			sel = select(fd + 1, &fds, NULL, NULL, &tv);
-			if (sel > 0) {
+			if (sel == 0) {
+				fprintf(stderr, "timeout !!!\n");
+				goto retry;
+			} else if (sel < 0) {
+				fprintf(stderr, "error.%d !!!\n", sel);
+				return -1;
+			} else {
 				ssize_t n = read(fd, &ack, 1);
 				if (n > 0) {
 					if (ack == ACK) {
