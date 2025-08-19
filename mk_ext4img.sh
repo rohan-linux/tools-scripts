@@ -114,13 +114,17 @@ function gen_ext4() {
 			logext " - FAILED"
 		fi
 	else
+		local tmpdir="tmpdir"
+
 		fakeroot sh -c "
-			mkdir -p rootfs
-			cd rootfs
-			cpio -idmv < ../${IMAGE_FILE} >/dev/null 2>&1
+			mkdir -p ${tmpdir}
+			cd ${tmpdir}
+			cpio -idmv < ${IMAGE_FILE} >/dev/null 2>&1
 			cd ..
 			dd if=/dev/zero of=${IMAGE_OUT}.ext4 bs=1M count=${count}
-			mkfs.ext4 -d rootfs ${IMAGE_OUT}.ext4"
+			mkfs.ext4 -d ${tmpdir} ${IMAGE_OUT}.ext4"
+
+		rm -rf ${tmpdir}
 		if [[ ! -f ${ext4img} ]]; then
 			logext " - FAILED"
 		fi
